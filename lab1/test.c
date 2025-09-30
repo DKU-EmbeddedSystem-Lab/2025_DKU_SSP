@@ -1,4 +1,4 @@
-#include "ftl_sim.h"
+#include "myftl.h"
 #include "test.h"
 
 int load_workload(const char* filename, struct workload_entry **workload, int *count) {

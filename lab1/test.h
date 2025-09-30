@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#include "ftl_sim.h"
+#include "myftl.h"
 
 // Forward declaration
 struct ssd;

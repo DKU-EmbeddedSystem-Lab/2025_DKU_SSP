@@ -1,4 +1,4 @@
-### 2025 DKU SSP — 반도체 SW 활용
+## 2025 DKU Semiconductor Software Practices
 
 ### 구조
 - `lab1/`: FTL 시뮬레이터 구현 과제

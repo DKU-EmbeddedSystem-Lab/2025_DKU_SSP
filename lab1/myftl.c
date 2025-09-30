@@ -1,4 +1,4 @@
-#include "ftl_sim.h"
+#include "myftl.h"
 
 /* TODO */
 int ftl_read(struct ssd *ssd, uint64_t lpn, int page_count) {
