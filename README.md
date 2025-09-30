@@ -2,7 +2,7 @@
 
 ### 구조
 - `lab1/`: FTL 시뮬레이터 구현 과제
-- `lab2/`: OpenSSD 애뮬레이션
+- `lab2/`: OpenSSD 애뮬레이션 환경에서 GreedyFTL 개선
 
 ### 요구 환경
 - Ubuntu 22.04
@@ -17,18 +17,18 @@ sudo apt update && sudo apt install -y build-essential
 ```bash
 cd lab1
 make           # ftl_sim 빌드
-./ftl_sim      # 실행
-# 정리: make clean
+./myftl        # 실행
+make clean     # 정리
 ```
 - 코드 구조
 ``` 
 lab1/
-├─ workload/           # 워크로드
+├─ workload/         # 워크로드 파일
 ├─ Makefile
 ├─ test.h
-├─ test.c              # 테스트 코드
-├─ ftl_sim.h           # 시뮬 파라미터/자료구조, FTL API 선언
-└─ ftl_sim.c           # FTL 구현(매핑/할당/GC)
+├─ test.c            # 테스트 코드
+├─ myftl.h           # 시뮬 파라미터/자료구조, FTL API 선언
+└─ myftl.c           # FTL 구현(매핑/할당/GC)
 ```
 
 ### Lab2
