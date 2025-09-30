@@ -1,6 +1,15 @@
 #include "myftl.h"
+#include "test.h"
 
 /* TODO */
+int ftl_io(struct ssd *ssd, struct workload_entry cmd) {
+	/* TODO
+	 * 요청을 확인하고 알맞은 처리 함수 호출
+	 */
+	printf("ftl_read 구현 필요\n");
+	return -1;  // 구현되지 않음
+}
+
 int ftl_read(struct ssd *ssd, uint64_t lpn, int page_count) {
 	for (int i = 0; i < page_count; i++) {
 		ssd->total_reads++;

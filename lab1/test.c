@@ -92,46 +92,34 @@ int dump_mapping_table(struct ssd *ssd, const char* filename) {
 int main() {
     // sequential workload
     struct ssd *ssd = ssd_init();
-    struct workload_entry *sequential_workload = NULL;
-    int sequential_workload_count = 0;
+    struct workload_entry *workload = NULL;
+    int workload_count = 0;
     
-    load_workload(SEQUENTIAL_WORKLOAD, &sequential_workload, &sequential_workload_count);
+    load_workload(SEQUENTIAL_WORKLOAD, &workload, &workload_count);
 
-    for (int op_cnt = 0; op_cnt < sequential_workload_count; op_cnt++) {
-        struct workload_entry *entry = &sequential_workload[op_cnt];
-        if (entry->operation == NVM_IO_READ) {
-            ftl_read(ssd, entry->lpn, entry->page_count);
-        } 
-        else if (entry->operation == NVM_IO_WRITE) {
-            ftl_write(ssd, entry->lpn, entry->page_count);
-        }
+    for (int op_idx = 0; op_idx < workload_count; op_idx++) {
+		ftl_io(ssd, workload[op_idx]);
     }
 
     dump_mapping_table(ssd, "sequential_mapping_table.csv");
 
-    free(sequential_workload);
+    free(workload);
     ssd_destroy(ssd);
 
     // random workload
     ssd = ssd_init();
-    struct workload_entry *random_workload = NULL;
-    int random_workload_count = 0;
+    workload = NULL;
+    workload_count = 0;
 
-    load_workload(RANDOM_WORKLOAD, &random_workload, &random_workload_count);
+    load_workload(RANDOM_WORKLOAD, &workload, &workload_count);
 
-    for (int op_cnt = 0; op_cnt < random_workload_count; op_cnt++) {
-        struct workload_entry *entry = &random_workload[op_cnt];
-        if (entry->operation == NVM_IO_READ) {
-            ftl_read(ssd, entry->lpn, entry->page_count);
-        }
-        else if (entry->operation == NVM_IO_WRITE) {
-            ftl_write(ssd, entry->lpn, entry->page_count);
-        }
+    for (int op_idx = 0; op_idx < workload_count; op_idx++) {
+		ftl_io(ssd, workload[op_idx]);
     }
 
     dump_mapping_table(ssd, "random_mapping_table.csv");
 
-    free(random_workload);
+    free(workload);
     ssd_destroy(ssd);
 
     return 0;

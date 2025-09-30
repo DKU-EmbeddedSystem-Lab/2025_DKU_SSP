@@ -10,6 +10,7 @@
 #include <time.h>
 #include <limits.h>
 #include <unistd.h>
+#include "test.h"
 
 // 기본 상수 정의
 #define INVALID_PPA     (~(0ULL))
@@ -115,6 +116,7 @@ struct ssd {
 };
 
 /* TODO 구현 필요한 함수(필요시 자유롭게 추가) */
+int ftl_io(struct ssd *ssd, struct workload_entry cmd);
 int ftl_read(struct ssd *ssd, uint64_t lpn, int page_count);
 int ftl_write(struct ssd *ssd, uint64_t lpn, int page_count);
 int ftl_gc(struct ssd *ssd);
