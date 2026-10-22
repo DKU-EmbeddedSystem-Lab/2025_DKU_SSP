@@ -3,9 +3,13 @@
 
 #include <sys/queue.h>
 #include <stdbool.h>
+#include <stdint.h>
+
+#include "host_lld.h"
 
 #define MAX_QUEUE_DEPTH			(1 << P_SLOT_TAG_WIDTH)
 #define CMD_NONE 				(1 << 31)
+#define HOST_NAME_MAX			64
 
 struct job {
 	unsigned int hid;
@@ -15,12 +19,14 @@ struct job {
 };
 
 struct host_config {
-	unsigned int min_lba;
-	unsigned int max_lba;
+	char name[HOST_NAME_MAX];
+	unsigned int min_lba; /* first LBA in the job region */
+	unsigned int max_lba; /* last valid request start LBA (inclusive) */
 	unsigned int nblks;
 	unsigned int op_read_pcent;
 	unsigned int op_write_pcent;
 	unsigned int pattern; //s 0 r 1
+	unsigned int iodepth;
 };
 
 struct host {
@@ -32,6 +38,8 @@ struct host {
 	unsigned int last_complete_blks[2];
 	unsigned int complete_reqs[2]; //w 0 r 1
 	unsigned int last_complete_reqs[2];
+	unsigned int outstanding;
+	uint64_t remaining_jobs;
 };
 
 void init_hosts();
@@ -43,7 +51,7 @@ void request_destroy(struct nvme_request_entry *req);
 void update_and_print_bw();
 unsigned int select_op(struct host *host);
 unsigned int get_next_blkaddr(struct host *host);
-struct job get_next_job();
+bool get_next_job(struct job *job);
 void perf_report(struct nvme_request_entry *req);
 bool check_remaining_jobs();
 int SchedulingHost();

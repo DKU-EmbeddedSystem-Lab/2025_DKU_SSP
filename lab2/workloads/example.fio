@@ -1,0 +1,15 @@
+[global]
+ioengine=libaio
+bs=16k
+size=12G
+io_size=12G
+iodepth=32
+
+[sequential-write]
+rw=write
+offset=0
+
+[random-mixed]
+rw=randrw
+rwmixread=70
+offset=64m

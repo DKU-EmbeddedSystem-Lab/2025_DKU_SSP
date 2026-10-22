@@ -1,6 +1,8 @@
 #ifndef SIM_H_
 #define SIM_H_
 
+#include <stdint.h>
+
 #include "sim_host.h"
 #include "ftl_config.h"
 
@@ -17,8 +19,10 @@ struct sim_config {
 	int *parts_pcent;
 	int precond;
 	int report;
-	int nops;
+	uint64_t nops;
 	char *output_dir;
+	char *fio_file;
+	int fio_mode;
 };
 
 struct sim {
@@ -26,7 +30,7 @@ struct sim {
 	unsigned long long initial_report_time;
 	unsigned long long last_report_time;
 	int next_hid;
-	unsigned int remaining_jobs;
+	uint64_t remaining_jobs;
 	struct host *hosts;
 	FILE *fp[2];
 	volatile unsigned int hist_idx[2];
@@ -34,7 +38,7 @@ struct sim {
 };
 
 void init_sim_config();
-void parse_listed_arg(char *optarg, int len, unsigned int *listed_arg);
+int parse_listed_arg(const char *optarg, int len, unsigned int *listed_arg);
 void argparser(int argc, char *argv[]);
 void fill_host_config();
 void show_configs();
