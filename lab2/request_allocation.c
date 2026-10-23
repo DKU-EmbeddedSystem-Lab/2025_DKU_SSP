@@ -43,11 +43,12 @@
 //   - First draft
 //////////////////////////////////////////////////////////////////////////////////
 
-/*
-#include "printf.h"
-*/
+#if COSMOS_SIM
 #include <stdio.h> /* jy */
 #include "sim_backend.h" /* jy */
+#else
+#include "printf.h"
+#endif
 #include <assert.h>
 #include "memory_map.h"
 
@@ -66,11 +67,7 @@ void InitReqPool()
 {
 	int chNo, wayNo, reqSlotTag;
 
-#if 1 //jy
 	reqPoolPtr = Addr2Mem(REQ_POOL, REQ_POOL_ADDR); //revise address /* jy */
-#else
-	reqPoolPtr = (P_REQ_POOL)REQ_POOL_ADDR; //revise address
-#endif
 
 	freeReqQ.headReq = 0;
 	freeReqQ.tailReq = AVAILABLE_OUNTSTANDING_REQ_COUNT - 1;
@@ -136,6 +133,10 @@ void PutToFreeReqQ(unsigned int reqSlotTag)
 
 	reqPoolPtr->reqPool[reqSlotTag].reqQueueType =  REQ_QUEUE_TYPE_FREE;
 	freeReqQ.reqCnt++;
+#if COSMOS_SIM //jy
+	/* Completion can unblock work on a channel already visited this pass. */
+	sim_note_progress();
+#endif
 }
 
 unsigned int GetFromFreeReqQ()

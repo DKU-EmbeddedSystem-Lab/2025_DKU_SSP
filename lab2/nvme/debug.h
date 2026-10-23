@@ -48,6 +48,11 @@
 #define __DEBUG_H_
 
 #include "assert.h"
+#if COSMOS_SIM //jy
+#include "sim_backend.h"
+#else
+#include "xil_printf.h"
+#endif
 
 #define __ASSERT 1
 
@@ -55,7 +60,7 @@
 #define ASSERT(X)														\
 if (!(X))																\
 {																		\
-	printf("\r\n\nerror in %s: Line %d\r\n", __FILE__, __LINE__);	\
+	xil_printf("\r\n\nerror in %s: Line %d\r\n", __FILE__, __LINE__);	\
 	while(1) ;															\
 }
 #else

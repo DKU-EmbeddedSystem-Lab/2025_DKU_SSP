@@ -44,10 +44,14 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-#include "printf.h"
+
 #include <assert.h>
 #include "memory_map.h"
-#include "sim_backend.h" /* jy */
+#if COSMOS_SIM
+#include "sim_backend.h"
+#else
+#include "printf.h"
+#endif
 
 
 P_DATA_BUF_MAP dataBufMapPtr;

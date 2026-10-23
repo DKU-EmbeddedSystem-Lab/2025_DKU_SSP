@@ -166,6 +166,37 @@ static int suffix_equal_ci(const char *suffix, const char *expected)
 	return string_equal_ci(suffix, expected);
 }
 
+/* Seeds are integers, not byte sizes; accept decimal and explicit hex. */
+static int parse_seed_u64(const char *value, uint64_t *result)
+{
+	const unsigned char *cursor = (const unsigned char *)value;
+	uint64_t number = 0;
+
+	if (cursor[0] != '0' || (cursor[1] != 'x' && cursor[1] != 'X'))
+		return parse_decimal_u64(value, result);
+	cursor += 2;
+	if (*cursor == '\0')
+		return -1;
+	while (*cursor != '\0') {
+		unsigned int digit;
+
+		if (*cursor >= '0' && *cursor <= '9')
+			digit = *cursor - '0';
+		else if (*cursor >= 'a' && *cursor <= 'f')
+			digit = *cursor - 'a' + 10;
+		else if (*cursor >= 'A' && *cursor <= 'F')
+			digit = *cursor - 'A' + 10;
+		else
+			return -1;
+		if (number > (UINT64_MAX - digit) / 16)
+			return -2;
+		number = number * 16 + digit;
+		cursor++;
+	}
+	*result = number;
+	return 0;
+}
+
 /* Parse fio sizes using its default kb_base=1024 compatibility rules. */
 static int parse_size_bytes(const char *value, int allow_zero,
 			    uint64_t *result)
@@ -346,6 +377,7 @@ static void init_job_state(struct job_state *state)
 	state->rw_mode = RW_SEQ_READ;
 	state->job.block_size_bytes = UINT64_C(4096);
 	state->job.iodepth = 1;
+	state->job.randrepeat = 1;
 	refresh_rw_mix(state);
 }
 
@@ -421,15 +453,14 @@ static int is_ignored_option(const char *key)
 static int is_unsupported_workload_option(const char *key)
 {
 	static const char *const unsupported[] = {
-		"allrandrepeat", "ba", "blockalign", "bsrange", "bssplit", "exitall",
+		"ba", "blockalign", "bsrange", "bssplit", "exitall",
 		"end_fsync", "fdatasync", "file_append", "file_service_type",
 		"flow", "flow_id", "flow_sleep",
 		"flow_watermark", "fsync", "iodepth_batch", "iodepth_batch_complete",
 		"iodepth_batch_submit", "iodepth_low", "kb_base", "latency_percentile",
 		"latency_target", "latency_window", "loops", "max_latency",
-		"new_group", "norandommap", "nrfiles", "offset_align", "openfiles",
-		"percentage_random", "pre_read", "ramp_time", "randrepeat",
-		"randseed", "random_distribution", "readonly",
+		"new_group", "nrfiles", "offset_align", "openfiles",
+		"percentage_random", "pre_read", "ramp_time", "readonly",
 		"rate", "rate_cycle", "rate_ignore_thinktime", "rate_iops",
 		"rate_iops_min", "rate_min", "rate_process", "rw_sequencer",
 		"serialize_overlap", "startdelay", "stonewall", "sync_file_range",
@@ -630,6 +661,56 @@ static int parse_option(struct job_state *state, const char *key,
 		if (status != 0) {
 			set_error(err, errsz, "line %lu: time_based expects a boolean",
 				  (unsigned long)line_number);
+			return -1;
+		}
+		return 0;
+	}
+
+	if (string_equal_ci(key, "norandommap") ||
+	    string_equal_ci(key, "randrepeat") ||
+	    string_equal_ci(key, "allrandrepeat")) {
+		int *destination = string_equal_ci(key, "norandommap") ?
+			&state->job.norandommap : &state->job.randrepeat;
+
+		if (parse_bool(value, bare, destination) != 0) {
+			set_error(err, errsz, "line %lu: %s expects a boolean",
+				  (unsigned long)line_number, key);
+			return -1;
+		}
+		return 0;
+	}
+
+	if (string_equal_ci(key, "randseed")) {
+		if (bare || parse_seed_u64(value, &number) != 0) {
+			set_error(err, errsz,
+				  "line %lu: randseed must be an unsigned 64-bit integer (decimal or 0x hexadecimal)",
+				  (unsigned long)line_number);
+			return -1;
+		}
+		state->job.randseed = number;
+		state->job.randseed_set = 1;
+		return 0;
+	}
+
+	if (string_equal_ci(key, "random_generator")) {
+		if (!bare && string_equal_ci(value, "tausworthe"))
+			state->job.random_generator = 0;
+		else if (!bare && string_equal_ci(value, "tausworthe64"))
+			state->job.random_generator = 1;
+		else {
+			set_error(err, errsz,
+				  "line %lu: unsupported random_generator '%s' (use tausworthe or tausworthe64)",
+				  (unsigned long)line_number, value);
+			return -1;
+		}
+		return 0;
+	}
+
+	if (string_equal_ci(key, "random_distribution")) {
+		if (bare || !string_equal_ci(value, "random")) {
+			set_error(err, errsz,
+				  "line %lu: unsupported random_distribution '%s' (only uniform 'random' is supported)",
+				  (unsigned long)line_number, value);
 			return -1;
 		}
 		return 0;

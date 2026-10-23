@@ -47,9 +47,9 @@
 
 #include <assert.h>
 #include "memory_map.h"
-#include "printf.h"
-#include <stdio.h>
+#if COSMOS_SIM
 #include "sim_backend.h" /* jy */
+#endif
 
 P_LOGICAL_SLICE_MAP logicalSliceMapPtr;
 P_VIRTUAL_SLICE_MAP virtualSliceMapPtr;
@@ -67,21 +67,12 @@ void InitAddressMap()
 	unsigned int blockNo, dieNo;
 
 	/* JY: glob ptr vars */
-#if 0 //jy
-	logicalSliceMapPtr = (P_LOGICAL_SLICE_MAP ) LOGICAL_SLICE_MAP_ADDR;
-	virtualSliceMapPtr = (P_VIRTUAL_SLICE_MAP) VIRTUAL_SLICE_MAP_ADDR;
-	virtualBlockMapPtr = (P_VIRTUAL_BLOCK_MAP) VIRTUAL_BLOCK_MAP_ADDR;
-	virtualDieMapPtr = (P_VIRTUAL_DIE_MAP) VIRTUAL_DIE_MAP_ADDR;
-	phyBlockMapPtr = (P_PHY_BLOCK_MAP) PHY_BLOCK_MAP_ADDR;
-	bbtInfoMapPtr = (P_BAD_BLOCK_TABLE_INFO_MAP) BAD_BLOCK_TABLE_INFO_MAP_ADDR;
-#else
 	logicalSliceMapPtr = Addr2Mem(LOGICAL_SLICE_MAP, LOGICAL_SLICE_MAP_ADDR);
 	virtualSliceMapPtr = Addr2Mem(VIRTUAL_SLICE_MAP, VIRTUAL_SLICE_MAP_ADDR);
 	virtualBlockMapPtr = Addr2Mem(VIRTUAL_BLOCK_MAP, VIRTUAL_BLOCK_MAP_ADDR);
 	virtualDieMapPtr = Addr2Mem(VIRTUAL_DIE_MAP, VIRTUAL_DIE_MAP_ADDR);
 	phyBlockMapPtr = Addr2Mem(PHY_BLOCK_MAP, PHY_BLOCK_MAP_ADDR);
 	bbtInfoMapPtr = Addr2Mem(BAD_BLOCK_TABLE_INFO_MAP, BAD_BLOCK_TABLE_INFO_MAP_ADDR);
-#endif
 
 	//init phyblockMap
 	for(dieNo=0 ; dieNo<USER_DIES ; dieNo++)
@@ -116,7 +107,7 @@ void RemapBadBlock()
 	unsigned int reservedBlockOfLun1[USER_DIES];
 	unsigned int badBlockCount[USER_DIES];
 
-	printf("Bad block remapping start...\r\n");
+	xil_printf("Bad block remapping start...\r\n");
 
 	for(dieNo=0 ; dieNo<USER_DIES ; dieNo++)
 	{
@@ -153,13 +144,13 @@ void RemapBadBlock()
 					}
 					else
 					{
-						printf("No reserved block - Ch %d Way %d virtualBlock %d is bad block \r\n", Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo);
+						xil_printf("No reserved block - Ch %d Way %d virtualBlock %d is bad block \r\n", Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo);
 						badBlockCount[dieNo]++;
 					}
 				}
 				else
 				{
-					printf("No reserved block - Ch %d Way %d virtualBlock %d is bad block \r\n", Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo);
+					xil_printf("No reserved block - Ch %d Way %d virtualBlock %d is bad block \r\n", Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo);
 					badBlockCount[dieNo]++;
 				}
 			}
@@ -187,20 +178,20 @@ void RemapBadBlock()
 					}
 					else
 					{
-						printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
+						xil_printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
 						badBlockCount[dieNo]++;
 					}
 				}
 				else
 				{
-					printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
+					xil_printf("No reserved block - Ch %x Way %x virtualBlock %d is bad block \r\n",  Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), blockNo+USER_BLOCKS_PER_LUN);
 					badBlockCount[dieNo]++;
 				}
 			}
 		}
 	}
 
-	printf("Bad block remapping end\r\n");
+	xil_printf("Bad block remapping end\r\n");
 
 
 	maxBadBlockCount = 0;
@@ -376,7 +367,7 @@ void FindBadBlock(unsigned char dieState[], unsigned int tempBbtBufAddr[], unsig
 				}
 				else
 				{
-					printf("	bad block is detected: Ch %d Way %d phyBlock %d \r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), phyBlockNo);
+					xil_printf("	bad block is detected: Ch %d Way %d phyBlock %d \r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), phyBlockNo);
 
 					blockChecker[dieNo] = BLOCK_STATE_BAD;
 				}
@@ -393,7 +384,7 @@ void FindBadBlock(unsigned char dieState[], unsigned int tempBbtBufAddr[], unsig
 				if(!((*markPointer0 == CLEAN_DATA_IN_BYTE) && (*markPointer1 == CLEAN_DATA_IN_BYTE)))
 					if(blockChecker[dieNo] == BLOCK_STATE_NORMAL)
 					{
-						printf("	bad block is detected: Ch %d Way %d phyBlock %d \r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), phyBlockNo);
+						xil_printf("	bad block is detected: Ch %d Way %d phyBlock %d \r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), phyBlockNo);
 
 						blockChecker[dieNo] = BLOCK_STATE_BAD;
 
@@ -471,7 +462,7 @@ void SaveBadBlockTable(unsigned char dieState[], unsigned int tempBbtBufAddr[], 
 
 	for(dieNo=0; dieNo < USER_DIES; dieNo++)
 		if(dieState[dieNo] == DIE_STATE_BAD_BLOCK_TABLE_NOT_EXIST)
-			printf("[ bad block table of Ch %d Way %d is saved. ]\r\n", dieNo%USER_CHANNELS, dieNo/USER_CHANNELS);
+			xil_printf("[ bad block table of Ch %d Way %d is saved. ]\r\n", dieNo%USER_CHANNELS, dieNo/USER_CHANNELS);
 }
 
 
@@ -505,7 +496,7 @@ void RecoverBadBlockTable(unsigned int tempBufAddr)
 
 		if((*bbtTableChecker == BLOCK_STATE_NORMAL)||(*bbtTableChecker == BLOCK_STATE_BAD))
 		{
-			printf("[ bad block table of ch %d way %d exists.]\r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo));
+			xil_printf("[ bad block table of ch %d way %d exists.]\r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo));
 
 			dieState[dieNo] = DIE_STATE_BAD_BLOCK_TABLE_EXIST;
 			for(phyBlockNo=0; phyBlockNo<TOTAL_BLOCKS_PER_DIE; phyBlockNo++)
@@ -514,14 +505,14 @@ void RecoverBadBlockTable(unsigned int tempBufAddr)
 
 				phyBlockMapPtr->phyBlock[dieNo][phyBlockNo].bad = *bbtTableChecker;
 				if(phyBlockMapPtr->phyBlock[dieNo][phyBlockNo].bad == BLOCK_STATE_BAD)
-					printf("	bad block: ch %d way %d phyBlock %d  \r\n", Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), phyBlockNo);
+					xil_printf("	bad block: ch %d way %d phyBlock %d  \r\n", Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo), phyBlockNo);
 			}
 
-			printf("[ bad blocks of ch %d way %d are checked. ]\r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo));
+			xil_printf("[ bad blocks of ch %d way %d are checked. ]\r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo));
 		}
 		else
 		{
-			printf("[ bad block table of ch %d way %d does not exist.]\r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo));
+			xil_printf("[ bad block table of ch %d way %d does not exist.]\r\n",Vdie2PchTranslation(dieNo), Vdie2PwayTranslation(dieNo));
 			dieState[dieNo] = DIE_STATE_BAD_BLOCK_TABLE_NOT_EXIST;
 			bbtMaker = BAD_BLOCK_TABLE_MAKER_TRIGGER;
 		}
@@ -545,7 +536,7 @@ void EraseTotalBlockSpace()
 {
 	unsigned int blockNo, dieNo, reqSlotTag;
 
-	printf("Erase total block space...wait for a minute...\r\n");
+	xil_printf("Erase total block space...wait for a minute...\r\n");
 
 	for(blockNo=0 ; blockNo<TOTAL_BLOCKS_PER_DIE ; blockNo++)
 		for(dieNo=0 ; dieNo<USER_DIES ; dieNo++)
@@ -569,7 +560,7 @@ void EraseTotalBlockSpace()
 
 
 	SyncAllLowLevelReqDone();
-	printf("Done.\r\n");
+	xil_printf("Done.\r\n");
 }
 
 
@@ -577,7 +568,7 @@ void EraseUserBlockSpace()
 {
 	unsigned int blockNo, dieNo, reqSlotTag;
 
-	printf("Erase User block space...wait for a minute...\r\n");
+	xil_printf("Erase User block space...wait for a minute...\r\n");
 
 	for(blockNo=0 ; blockNo<USER_BLOCKS_PER_DIE ; blockNo++)
 		for(dieNo=0 ; dieNo<USER_DIES ; dieNo++)
@@ -598,7 +589,7 @@ void EraseUserBlockSpace()
 			}
 
 	SyncAllLowLevelReqDone();
-	printf("Done.\r\n");
+	xil_printf("Done.\r\n");
 }
 
 
@@ -607,11 +598,11 @@ void InitBlockDieMap()
 	unsigned int dieNo;
 	unsigned char eraseFlag = 1;
 
-	printf("Press 'X' to re-make the bad block table.\r\n");
-#if 0 //jy
-	if (inbyte() == 'X')
-#else
+	xil_printf("Press 'X' to re-make the bad block table.\r\n");
+#if COSMOS_SIM //jy
 	if (getchar() == 'X')
+#else
+	if (inbyte() == 'X')
 #endif
 	{
 		EraseTotalBlockSpace();

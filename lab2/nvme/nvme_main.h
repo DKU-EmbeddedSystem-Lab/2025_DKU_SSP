@@ -48,10 +48,6 @@
 #ifndef __NVME_MAIN_H_
 #define __NVME_MAIN_H_
 
-#if 1//jy 
-void nvme_main(int argc, char *argv[]);
-#else
-void nvme_main();
-#endif
+void nvme_main(void);
 
 #endif	//__NVME_MAIN_H_

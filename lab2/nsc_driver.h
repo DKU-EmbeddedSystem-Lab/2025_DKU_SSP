@@ -83,7 +83,7 @@
 #define V2FRequestComplete(statusReport) (((statusReport) & 0x60) == 0x60)
 #define V2FRequestFail(statusReport) ((statusReport) & 3)
 
-#if 1 //jy
+#if COSMOS_SIM //jy
 union addr {
 	void *addr;
 	struct {

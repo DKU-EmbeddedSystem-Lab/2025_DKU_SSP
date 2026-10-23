@@ -60,18 +60,18 @@
 
 
 
-#if 0 //jy
+#if COSMOS_SIM //jy
+#include <stdio.h>
+#include <stdlib.h>
+#include "sim_backend.h"
+#include "sim_main.h"
+#else
 #include "xil_cache.h"
 #include "xil_exception.h"
 #include "xil_mmu.h"
 #include "xparameters_ps.h"
 #include "xscugic_hw.h"
 #include "xscugic.h"
-#include "printf.h"
-#else
-#include <stdio.h>
-#include <stdlib.h>
-#include "sim_backend.h"
 #endif
 #include "nvme/debug.h"
 
@@ -79,10 +79,9 @@
 #include "nvme/nvme_main.h"
 #include "nvme/host_lld.h"
 
-/* jy */
-//XScuGic GicInstance;
+#if !COSMOS_SIM //jy
+XScuGic GicInstance;
 
-#if 0  /* jy */
 int main()
 {
 	unsigned int u;
@@ -110,10 +109,10 @@ int main()
 	Xil_EnableMMU();
 	Xil_ICacheEnable();
 	Xil_DCacheEnable();
-	printf("[!] MMU has been enabled.\r\n");
+	xil_printf("[!] MMU has been enabled.\r\n");
 
 
-	printf("\r\n Hello COSMOS+ OpenSSD !!! \r\n");
+	xil_printf("\r\n Hello COSMOS+ OpenSSD !!! \r\n");
 
 
 	Xil_ExceptionInit();
@@ -140,12 +139,13 @@ int main()
 #else
 int main(int argc, char *argv[])
 {
+	parse_sim_args(argc, argv);
 	init_g_timer();
 	init_nand();
-	nvme_main(argc, argv);
+	nvme_main();
 #endif
 
-	printf("done\r\n");
+	xil_printf("done\r\n");
 
 	return 0;
 }

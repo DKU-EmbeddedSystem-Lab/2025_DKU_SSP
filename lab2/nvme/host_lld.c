@@ -53,9 +53,7 @@
 /*
 #include "stdio.h"
 #include "xil_exception.h"
-#include "printf.h"
 */
-#include <stdio.h>  /* jy */
 #include "xparameters.h"  /* jy */
 #include "sim_frontend.h" //jydebug
 #include "debug.h"
@@ -67,7 +65,7 @@
 extern NVME_CONTEXT g_nvmeTask;
 HOST_DMA_STATUS g_hostDmaStatus;
 HOST_DMA_ASSIST_STATUS g_hostDmaAssistStatus;
-#if 1 //jy
+#if COSMOS_SIM //jy
 HOST_DMA_CMD_FIFO_QUEUE g_hostDmaCmdQueue;
 #endif
 
@@ -98,13 +96,13 @@ void dev_irq_handler()
 
 	devReg.dword = IO_READ32(DEV_IRQ_STATUS_REG_ADDR);
 	IO_WRITE32(DEV_IRQ_CLEAR_REG_ADDR, devReg.dword);
-//	printf("IRQ: 0x%X\r\n", devReg.dword);
+//	xil_printf("IRQ: 0x%X\r\n", devReg.dword);
 
 	if(devReg.pcieLink == 1)
 	{
 		PCIE_STATUS_REG pcieReg;
 		pcieReg.dword = IO_READ32(PCIE_STATUS_REG_ADDR);
-		printf("PCIe Link: %d\r\n", pcieReg.pcieLinkUp);
+		xil_printf("PCIe Link: %d\r\n", pcieReg.pcieLinkUp);
 		// set_link_width(0) //you can choose pcie lane width 0,2,4,8 mini board -> maximum 4, cosmos+ board -> maximum 8
 		if(pcieReg.pcieLinkUp == 0)
 			g_nvmeTask.status = NVME_TASK_RESET;
@@ -114,35 +112,35 @@ void dev_irq_handler()
 	{
 		PCIE_FUNC_REG pcieReg;
 		pcieReg.dword = IO_READ32(PCIE_FUNC_REG_ADDR);
-		printf("PCIe Bus Master: %d\r\n", pcieReg.busMaster);
+		xil_printf("PCIe Bus Master: %d\r\n", pcieReg.busMaster);
 	}
 
 	if(devReg.pcieIrq == 1)
 	{
 		PCIE_FUNC_REG pcieReg;
 		pcieReg.dword = IO_READ32(PCIE_FUNC_REG_ADDR);
-		printf("PCIe IRQ Disable: %d\r\n", pcieReg.irqDisable);
+		xil_printf("PCIe IRQ Disable: %d\r\n", pcieReg.irqDisable);
 	}
 
 	if(devReg.pcieMsi == 1)
 	{
 		PCIE_FUNC_REG pcieReg;
 		pcieReg.dword = IO_READ32(PCIE_FUNC_REG_ADDR);
-		printf("PCIe MSI Enable: %d, 0x%x\r\n", pcieReg.msiEnable, pcieReg.msiVecNum);
+		xil_printf("PCIe MSI Enable: %d, 0x%x\r\n", pcieReg.msiEnable, pcieReg.msiVecNum);
 	}
 
 	if(devReg.pcieMsix == 1)
 	{
 		PCIE_FUNC_REG pcieReg;
 		pcieReg.dword = IO_READ32(PCIE_FUNC_REG_ADDR);
-		printf("PCIe MSI-X Enable: %d\r\n", pcieReg.msixEnable);
+		xil_printf("PCIe MSI-X Enable: %d\r\n", pcieReg.msixEnable);
 	}
 
 	if(devReg.nvmeCcEn == 1)
 	{
 		NVME_STATUS_REG nvmeReg;
 		nvmeReg.dword = IO_READ32(NVME_STATUS_REG_ADDR);
-		printf("NVME CC.EN: %d\r\n", nvmeReg.ccEn);
+		xil_printf("NVME CC.EN: %d\r\n", nvmeReg.ccEn);
 
 		if(nvmeReg.ccEn == 1)
 			g_nvmeTask.status = NVME_TASK_WAIT_CC_EN;
@@ -155,29 +153,29 @@ void dev_irq_handler()
 	{
 		NVME_STATUS_REG nvmeReg;
 		nvmeReg.dword = IO_READ32(NVME_STATUS_REG_ADDR);
-		printf("NVME CC.SHN: %d\r\n", nvmeReg.ccShn);
+		xil_printf("NVME CC.SHN: %d\r\n", nvmeReg.ccShn);
 		if(nvmeReg.ccShn == 1)
 			g_nvmeTask.status = NVME_TASK_SHUTDOWN;
 	}
 
 	if(devReg.mAxiWriteErr == 1)
 	{
-		printf("mAxiWriteErr\r\n");
+		xil_printf("mAxiWriteErr\r\n");
 	}
 
 	if(devReg.pcieMreqErr == 1)
 	{
-		printf("pcieMreqErr\r\n");
+		xil_printf("pcieMreqErr\r\n");
 	}
 
 	if(devReg.pcieCpldErr == 1)
 	{
-		printf("pcieCpldErr\r\n");
+		xil_printf("pcieCpldErr\r\n");
 	}
 
 	if(devReg.pcieCpldLenErr == 1)
 	{
-		printf("pcieCpldLenErr\r\n");
+		xil_printf("pcieCpldLenErr\r\n");
 	}
 //	Xil_ExceptionEnable();
 }
@@ -187,7 +185,7 @@ unsigned int check_nvme_cc_en()
 	NVME_STATUS_REG nvmeReg;
 
 	nvmeReg.dword = IO_READ32(NVME_STATUS_REG_ADDR);
-#if 1 //jy
+#if COSMOS_SIM //jy
 	nvmeReg.ccEn = 1;
 	IO_WRITE32(NVME_STATUS_REG_ADDR, nvmeReg.dword);
 #endif
@@ -200,7 +198,7 @@ void pcie_async_reset(unsigned int rstCnt)
 	NVME_STATUS_REG nvmeReg;
 
 	nvmeReg.rstCnt = rstCnt;
-	printf("rstCnt= %X \r\n",rstCnt);
+	xil_printf("rstCnt= %X \r\n",rstCnt);
 	IO_WRITE32(NVME_STATUS_REG_ADDR, nvmeReg.dword);
 
 }
@@ -211,7 +209,7 @@ void set_link_width(unsigned int linkNum)
 
 	nvmeReg.linkNum = linkNum;
 	nvmeReg.linkEn = 1;
-	printf("linkNum= %X \r\n",linkNum);
+	xil_printf("linkNum= %X \r\n",linkNum);
 	IO_WRITE32(NVME_STATUS_REG_ADDR, nvmeReg.dword);
 
 }
@@ -253,7 +251,7 @@ void set_nvme_admin_queue(unsigned int sqValid, unsigned int cqValid, unsigned i
 unsigned int get_nvme_cmd(unsigned short *qID, unsigned short *cmdSlotTag, unsigned int *cmdSeqNum, unsigned int *cmdDword)
 {
 	NVME_CMD_FIFO_REG nvmeReg;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	unsigned int cmdValid = 0;
 #endif
 	
@@ -266,11 +264,11 @@ unsigned int get_nvme_cmd(unsigned short *qID, unsigned short *cmdSlotTag, unsig
 		*qID = nvmeReg.qID;
 		*cmdSlotTag = nvmeReg.cmdSlotTag;
 		*cmdSeqNum = nvmeReg.cmdSeqNum;
-		//printf("nvmeReg.cmdSlotTag = 0x%X\r\n", nvmeReg.cmdSlotTag);
+		//xil_printf("nvmeReg.cmdSlotTag = 0x%X\r\n", nvmeReg.cmdSlotTag);
 		addr = NVME_CMD_SRAM_ADDR + (nvmeReg.cmdSlotTag * 64);
 		for(idx = 0; idx < 16; idx++)
 			*(cmdDword + idx) = IO_READ32(addr + (idx * 4));
-#if 1 //jy
+#if COSMOS_SIM //jy
 		cmdValid = nvmeReg.cmdValid;
 		nvmeReg.cmdValid = 0;
 		IO_WRITE32(NVME_CMD_FIFO_REG_ADDR, nvmeReg.dword);
@@ -410,7 +408,7 @@ void set_direct_rx_dma(unsigned int devAddr, unsigned int pcieAddrH, unsigned in
 
 }
 
-#if 1 //jy
+#if COSMOS_SIM //jy
 void push_dma_command(unsigned int direction, unsigned int fifoTail) {
 	HOST_DMA_CMD_FIFO_REG hostDmaReg;
 
@@ -455,7 +453,7 @@ void set_auto_tx_dma(unsigned int cmdSlotTag, unsigned int cmd4KBOffset, unsigne
 	IO_WRITE32((HOST_DMA_CMD_FIFO_REG_ADDR + 16), hostDmaReg.dword[4]);//slot_modified
 
 	tempTail = g_hostDmaStatus.fifoTail.autoDmaTx++;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	push_dma_command(HOST_DMA_TX_DIRECTION, tempTail);
 #endif
 	if(tempTail > g_hostDmaStatus.fifoTail.autoDmaTx)
@@ -491,7 +489,7 @@ void set_auto_rx_dma(unsigned int cmdSlotTag, unsigned int cmd4KBOffset, unsigne
 	IO_WRITE32((HOST_DMA_CMD_FIFO_REG_ADDR + 16), hostDmaReg.dword[4]);//slot_modified
 
 	tempTail = g_hostDmaStatus.fifoTail.autoDmaRx++;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	push_dma_command(HOST_DMA_RX_DIRECTION, tempTail);
 #endif
 	if(tempTail > g_hostDmaStatus.fifoTail.autoDmaRx)
@@ -534,7 +532,7 @@ void check_auto_rx_dma_done()
 
 unsigned int check_auto_tx_dma_partial_done(unsigned int tailIndex, unsigned int tailAssistIndex)
 {
-	//printf("check_auto_tx_dma_partial_done \r\n");
+	//xil_printf("check_auto_tx_dma_partial_done \r\n");
 
 	g_hostDmaStatus.fifoHead.dword = IO_READ32(HOST_DMA_FIFO_CNT_REG_ADDR);
 
@@ -577,7 +575,7 @@ unsigned int check_auto_tx_dma_partial_done(unsigned int tailIndex, unsigned int
 
 unsigned int check_auto_rx_dma_partial_done(unsigned int tailIndex, unsigned int tailAssistIndex)
 {
-	//printf("check_auto_rx_dma_partial_done \r\n");
+	//xil_printf("check_auto_rx_dma_partial_done \r\n");
 
 	g_hostDmaStatus.fifoHead.dword = IO_READ32(HOST_DMA_FIFO_CNT_REG_ADDR);
 

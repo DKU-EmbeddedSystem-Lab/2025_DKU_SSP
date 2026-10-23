@@ -47,6 +47,10 @@
 #ifndef MEMORY_MAP_H_
 #define MEMORY_MAP_H_
 
+#if !COSMOS_SIM
+#define Addr2Mem(type, addr)	        (type *) addr
+#endif
+
 #include "data_buffer.h"
 #include "address_translation.h"
 #include "request_allocation.h"

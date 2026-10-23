@@ -14,15 +14,12 @@
 #define LOGICAL_BLOCKS_PER_LUN_MAX	(LOGICAL_BLOCKS_PER_DIE_MAX / LUNS_PER_DIE)
 
 struct sim_config {
-	int partition;
 	int nhosts;
-	int *parts_pcent;
 	int precond;
 	int report;
 	uint64_t nops;
-	char *output_dir;
-	char *fio_file;
-	int fio_mode;
+	const char *output_dir;
+	const char *fio_file;
 };
 
 struct sim {
@@ -37,15 +34,11 @@ struct sim {
 	volatile unsigned long long hist[2][HIST_BUF_MAX][6]; // LATENCY(time hid op lat lba nblks) PERF(time hid rb wb crb cwb)
 };
 
-void init_sim_config();
-int parse_listed_arg(const char *optarg, int len, unsigned int *listed_arg);
-void argparser(int argc, char *argv[]);
-void fill_host_config();
-void show_configs();
+void parse_sim_args(int argc, char *argv[]);
 void flush_hist_to_file(int idx);
 void sim_cleanup();
 void precond_mappings();
-void init_sim(int argc, char *argv[]);
+void init_sim(void);
 
 extern struct sim sim;
 

@@ -46,12 +46,10 @@
 //   - First draft
 //////////////////////////////////////////////////////////////////////////////////
 
+#if COSMOS_SIM
+#include "sim_backend.h"
+#endif
 #include <assert.h>
-/*
-#include "printf.h"
-*/
-#include <stdio.h> /* jy */
-#include "sim_backend.h" /* jy */
 #include "memory_map.h"
 #include "nvme/debug.h"
 
@@ -114,10 +112,15 @@ void SyncAllLowLevelReqDone()
 {
 	while((nvmeDmaReqQ.headReq != REQ_SLOT_TAG_NONE) || notCompletedNandReqCnt || blockedReqCnt)
 	{
+#if COSMOS_SIM //jy
+		unsigned long long generation = sim_progress_generation();
+#endif
 		CheckDoneNvmeDmaReq();
 		SchedulingNandReq();
-#if 1 //jy
+#if COSMOS_SIM //jy
 		SchedulingNand();
+		/* Only low-level work can progress while the FTL caller is waiting. */
+		sim_advance_if_idle(generation);
 #endif
 	}
 }
@@ -126,10 +129,14 @@ void SyncAvailFreeReq()
 {
 	while(freeReqQ.headReq == REQ_SLOT_TAG_NONE)
 	{
+#if COSMOS_SIM //jy
+		unsigned long long generation = sim_progress_generation();
+#endif
 		CheckDoneNvmeDmaReq();
 		SchedulingNandReq();
-#if 1 //jy
+#if COSMOS_SIM //jy
 		SchedulingNand();
+		sim_advance_if_idle(generation);
 #endif
 	}
 }
@@ -138,10 +145,14 @@ void SyncReleaseEraseReq(unsigned int chNo, unsigned int wayNo, unsigned int blo
 {
 	while(rowAddrDependencyTablePtr->block[chNo][wayNo][blockNo].blockedEraseReqFlag)
 	{
+#if COSMOS_SIM //jy
+		unsigned long long generation = sim_progress_generation();
+#endif
 		CheckDoneNvmeDmaReq();
 		SchedulingNandReq();
-#if 1 //jy
+#if COSMOS_SIM //jy
 		SchedulingNand();
+		sim_advance_if_idle(generation);
 #endif
 	}
 }
@@ -826,7 +837,7 @@ unsigned int CheckReqStatus(unsigned int chNo, unsigned int wayNo)
 			{
 				errorInfo = CheckEccErrorInfo(chNo, wayNo);
 
-#if 1 //jy
+#if COSMOS_SIM //jy
 #else
 				if (errorInfo == ERROR_INFO_WARNING)
 					return REQ_STATUS_WARNING;
@@ -941,16 +952,16 @@ void ExecuteNandReq(unsigned int chNo, unsigned int wayNo, unsigned int reqStatu
 					}
 
 				if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_READ)
-					printf("Read Trigger FAIL on      ");
+					xil_printf("Read Trigger FAIL on      ");
 				else if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_READ_TRANSFER)
-					printf("Read Transfer FAIL on     ");
+					xil_printf("Read Transfer FAIL on     ");
 				else if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_WRITE)
-					printf("Write FAIL on             ");
+					xil_printf("Write FAIL on             ");
 				else if(reqPoolPtr->reqPool[reqSlotTag].reqCode == REQ_CODE_ERASE)
-					printf("Erase FAIL on             ");
+					xil_printf("Erase FAIL on             ");
 
 				rowAddr = GenerateNandRowAddr(reqSlotTag);
-				printf("ch %x way %x rowAddr %x / completion %x statusReport %x \r\n", chNo, wayNo, rowAddr, completeFlagTablePtr->completeFlag[chNo][wayNo],statusReportTablePtr->statusReport[chNo][wayNo]);
+				xil_printf("ch %x way %x rowAddr %x / completion %x statusReport %x \r\n", chNo, wayNo, rowAddr, completeFlagTablePtr->completeFlag[chNo][wayNo],statusReportTablePtr->statusReport[chNo][wayNo]);
 
 				if(reqPoolPtr->reqPool[reqSlotTag].reqOpt.nandEcc == REQ_OPT_NAND_ECC_OFF)
 					if(reqPoolPtr->reqPool[reqSlotTag].reqOpt.dataBufFormat == REQ_OPT_DATA_BUF_ADDR)
@@ -971,7 +982,7 @@ void ExecuteNandReq(unsigned int chNo, unsigned int wayNo, unsigned int reqStatu
 			else if(reqStatus == REQ_STATUS_WARNING)
 			{
 				rowAddr = GenerateNandRowAddr(reqSlotTag);
-				printf("ECC Uncorrectable Soon on ch %x way %x rowAddr %x / completion %x statusReport %x \r\n", chNo, wayNo, rowAddr, completeFlagTablePtr->completeFlag[chNo][wayNo],statusReportTablePtr->statusReport[chNo][wayNo]);
+				xil_printf("ECC Uncorrectable Soon on ch %x way %x rowAddr %x / completion %x statusReport %x \r\n", chNo, wayNo, rowAddr, completeFlagTablePtr->completeFlag[chNo][wayNo],statusReportTablePtr->statusReport[chNo][wayNo]);
 
 				//grown bad block information update
 				phyBlockNo = ((rowAddr % LUN_1_BASE_ADDR) / PAGES_PER_MLC_BLOCK) + ((rowAddr / LUN_1_BASE_ADDR)* TOTAL_BLOCKS_PER_LUN);

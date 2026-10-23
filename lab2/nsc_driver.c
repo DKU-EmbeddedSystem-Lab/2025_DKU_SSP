@@ -48,11 +48,18 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 #include "nsc_driver.h"
-#include "sim_backend.h" /* jy */
+#if COSMOS_SIM //jy
+#include "sim_backend.h"
+#endif
 
 unsigned int __attribute__((optimize("O0"))) V2FIsControllerBusy(V2FMCRegisters* dev)
 {
 	volatile unsigned int channelBusy = *((volatile unsigned int*)&(dev->channelBusy));
+
+#if COSMOS_SIM //jy
+	/* Keep the channel command slot occupied until the backend accepts it. */
+	channelBusy |= (*((volatile unsigned int*)&(dev->cmdSelect)) != V2FCommand_NOP);
+#endif
 
 	return channelBusy;
 }
@@ -61,12 +68,17 @@ void __attribute__((optimize("O0"))) V2FResetSync(V2FMCRegisters* dev, int way)
 {
 	*((volatile unsigned int*)&(dev->waySelection)) = way;
 	*((volatile unsigned int*)&(dev->cmdSelect)) = V2FCommand_Reset;
-	while (V2FIsControllerBusy(dev));
+	while (V2FIsControllerBusy(dev)) {
+#if COSMOS_SIM //jy
+		/* The single-threaded backend must accept synchronous commands here. */
+		SchedulingNand();
+#endif
+	}
 }
 
 void __attribute__((optimize("O0"))) V2FSetFeaturesSync(V2FMCRegisters* dev, int way, unsigned int feature0x02, unsigned int feature0x10, unsigned int feature0x01, unsigned int payLoadAddr)
 {
-#if 0 //jy
+#if !COSMOS_SIM //jy
 	unsigned int* payload = (unsigned int*)payLoadAddr;
 #else
 	unsigned int* payload = Addr2Mem(unsigned int, payLoadAddr);
@@ -77,7 +89,11 @@ void __attribute__((optimize("O0"))) V2FSetFeaturesSync(V2FMCRegisters* dev, int
 	*((volatile unsigned int*)&(dev->waySelection)) = way;
 	*((volatile unsigned int*)&(dev->userData)) = (unsigned int)payload;
 	*((volatile unsigned int*)&(dev->cmdSelect)) = V2FCommand_SetFeatures;
-	while (V2FIsControllerBusy(dev));
+	while (V2FIsControllerBusy(dev)) {
+#if COSMOS_SIM //jy
+		SchedulingNand();
+#endif
+	}
 }
 
 void __attribute__((optimize("O0"))) V2FGetFeaturesSync(V2FMCRegisters* dev, int way, unsigned int* feature0x01, unsigned int* feature0x02, unsigned int* feature0x10, unsigned int* feature0x30)
@@ -86,7 +102,7 @@ void __attribute__((optimize("O0"))) V2FGetFeaturesSync(V2FMCRegisters* dev, int
 	volatile unsigned int completion = 0;
 	*((volatile unsigned int*)&(dev->waySelection)) = way;
 	*((volatile unsigned int*)&(dev->userData)) = (unsigned int)buffer;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	union addr addr;
    	addr.addr = (void *)&completion;
 	*((volatile unsigned int*)&(dev->completionAddress)) = addr.low;
@@ -95,7 +111,11 @@ void __attribute__((optimize("O0"))) V2FGetFeaturesSync(V2FMCRegisters* dev, int
 	*((volatile unsigned int*)&(dev->completionAddress)) = (unsigned int)&completion;
 #endif
 	*((volatile unsigned int*)&(dev->cmdSelect)) = V2FCommand_GetFeatures;
-	while (V2FIsControllerBusy(dev));
+	while (V2FIsControllerBusy(dev)) {
+#if COSMOS_SIM //jy
+		SchedulingNand();
+#endif
+	}
 	while (!(completion & 1));
 	*feature0x01 = buffer[0];
 	*feature0x02 = buffer[1];
@@ -115,7 +135,7 @@ void __attribute__((optimize("O0"))) V2FReadPageTransferAsync(V2FMCRegisters* de
 	*((volatile unsigned int*)&(dev->waySelection)) = way;
 	*((volatile unsigned int*)&(dev->dataAddress)) = (unsigned int)pageDataBuffer;
 	*((volatile unsigned int*)&(dev->spareAddress)) = (unsigned int)spareDataBuffer;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	union addr addr;
    	addr.addr = completion;
 	*((volatile unsigned int*)&(dev->completionAddress)) = addr.low;
@@ -133,7 +153,7 @@ void __attribute__((optimize("O0"))) V2FReadPageTransferRawAsync(V2FMCRegisters*
 {
 	*((volatile unsigned int*)&(dev->waySelection)) = way;
 	*((volatile unsigned int*)&(dev->dataAddress)) = (unsigned int)pageDataBuffer;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	union addr addr;
    	addr.addr = completion;
 	*((volatile unsigned int*)&(dev->completionAddress)) = addr.low;
@@ -165,7 +185,7 @@ void __attribute__((optimize("O0"))) V2FEraseBlockAsync(V2FMCRegisters* dev, int
 void __attribute__((optimize("O0"))) V2FStatusCheckAsync(V2FMCRegisters* dev, int way, unsigned int* statusReport)
 {
 	*((volatile unsigned int*)&(dev->waySelection)) = way;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	union addr addr;
    	addr.addr = statusReport;
 	*((volatile unsigned int*)&(dev->completionAddress)) = addr.low;
@@ -175,7 +195,7 @@ void __attribute__((optimize("O0"))) V2FStatusCheckAsync(V2FMCRegisters* dev, in
 #endif
 	*statusReport = 0;
 	*((volatile unsigned int*)&(dev->cmdSelect)) = V2FCommand_StatusCheck;
-#if 1 //jy
+#if COSMOS_SIM //jy
 	SchedulingNand();
 #endif
 }

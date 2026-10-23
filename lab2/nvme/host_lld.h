@@ -318,7 +318,7 @@ typedef struct _HOST_DMA_STATUS
 	unsigned int autoDmaTxCnt;
 	unsigned int autoDmaRxCnt;
 } HOST_DMA_STATUS;
-#if 1 //jy
+#if COSMOS_SIM //jy
 
 
 typedef struct _HOST_DMA_CMD_FIFO_QUEUE

@@ -45,11 +45,12 @@
 //   - First draft
 //////////////////////////////////////////////////////////////////////////////////
 
-/*
-#include "printf.h"
-*/
+#if COSMOS_SIM
 #include <stdio.h>  /* jy */
 #include "sim_backend.h" /* jy */
+#else
+#include "printf.h"
+#endif
 #include <assert.h>
 #include "memory_map.h"
 

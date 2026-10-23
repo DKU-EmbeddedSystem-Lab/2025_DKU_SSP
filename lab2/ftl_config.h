@@ -110,7 +110,7 @@
 #endif
 
 //number of connected (=AXI mapped) NSC
-#if 1 //jy
+#if COSMOS_SIM //jy
 #define NUMBER_OF_CONNECTED_CHANNEL	4
 #else
 #define NUMBER_OF_CONNECTED_CHANNEL (NSC_7_CONNECTED + NSC_6_CONNECTED + NSC_5_CONNECTED + NSC_4_CONNECTED + NSC_3_CONNECTED + NSC_2_CONNECTED + NSC_1_CONNECTED + NSC_0_CONNECTED)
@@ -125,7 +125,7 @@
 #define	BYTES_PER_SPARE_REGION_OF_NAND_ROW		1664
 #define BYTES_PER_NAND_ROW						(BYTES_PER_DATA_REGION_OF_NAND_ROW + BYTES_PER_SPARE_REGION_OF_NAND_ROW)
 
-#if 1 //jy
+#if COSMOS_SIM //jy
 #define	ROWS_PER_SLC_BLOCK			256
 #else
 #define	ROWS_PER_SLC_BLOCK			128
@@ -139,7 +139,7 @@
 #define	MAIN_ROWS_PER_SLC_LUN		(ROWS_PER_SLC_BLOCK * MAIN_BLOCKS_PER_LUN)
 #define	MAIN_ROWS_PER_MLC_LUN		(ROWS_PER_MLC_BLOCK * MAIN_BLOCKS_PER_LUN)
 
-#if 1 //jy
+#if COSMOS_SIM //jy
 #define	LUNS_PER_DIE				1
 #else
 #define	LUNS_PER_DIE				2
@@ -162,7 +162,7 @@
 
 //supported maximum channel/way structure
 #define	NSC_MAX_CHANNELS				(NUMBER_OF_CONNECTED_CHANNEL)
-#if 1 //jy
+#if COSMOS_SIM //jy
 #define	NSC_MAX_WAYS					2
 #else
 #define	NSC_MAX_WAYS					8
@@ -199,13 +199,13 @@
 
 //************************************************************************
 #define	BITS_PER_FLASH_CELL		SLC_MODE	//user configurable factor
-#if 1 //jy
+#if COSMOS_SIM //jy
 #define	USER_BLOCKS_PER_LUN		2048
 #else
 #define	USER_BLOCKS_PER_LUN		4096		//user configurable factor
 #endif
 #define	USER_CHANNELS			(NUMBER_OF_CONNECTED_CHANNEL)		//user configurable factor
-#if 1 //jy
+#if COSMOS_SIM //jy
 #define	USER_WAYS				2
 #else
 #define	USER_WAYS				8			//user configurable factor

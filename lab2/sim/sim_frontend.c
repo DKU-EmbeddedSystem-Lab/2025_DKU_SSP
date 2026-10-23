@@ -170,5 +170,9 @@ int SchedulingFE() {
 	}
 	update_dma_status();
 
+	/* This also records progress when DMA issuance calls us reentrantly. */
+	if (exe)
+		sim_note_progress();
+
 	return exe;
 }

@@ -49,7 +49,7 @@
 #define __IO_ACCESS_H_
 #include "sim_backend.h" /* jy */
 
-#if 0 //jy
+#if !COSMOS_SIM //jy
 #define IO_WRITE32(addr, val)		*((volatile unsigned int *)(addr)) = val
 #define IO_READ32(addr)				*((volatile unsigned int *)(addr))
 #else

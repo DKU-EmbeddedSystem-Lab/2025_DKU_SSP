@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <assert.h>
 
 #include "host_lld.h"
 
@@ -12,15 +13,179 @@
 #include "sim_frontend.h"
 #include "sim_backend.h"
 
-void init_host_config(struct host_config *config, unsigned int *opt) {
-	memset(config, 0, sizeof(*config));
-	config->min_lba = 0;
-	config->max_lba = 0;
-	config->pattern = opt[0];
-	config->op_read_pcent = opt[1];
-	config->op_write_pcent = opt[2];
-	config->nblks = opt[3];
-	config->iodepth = MAX_QUEUE_DEPTH;
+/* SplitMix64 expands a seed into valid, decorrelated Tausworthe states. */
+static uint64_t expand_seed(uint64_t *seed)
+{
+	uint64_t value = (*seed += UINT64_C(0x9e3779b97f4a7c15));
+	value = (value ^ (value >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+	value = (value ^ (value >> 27)) * UINT64_C(0x94d049bb133111eb);
+	return value ^ (value >> 31);
+}
+
+/* Combined Tausworthe recurrences (Taus88 / Taus258, as used by fio). */
+static uint32_t taus32_step(uint32_t state, unsigned int left,
+		unsigned int right, unsigned int shift, unsigned int low_bits)
+{
+	return ((state & (UINT32_MAX << low_bits)) << shift) ^
+		(((state << left) ^ state) >> right);
+}
+
+static uint64_t taus64_step(uint64_t state, unsigned int left,
+		unsigned int right, unsigned int shift, unsigned int low_bits)
+{
+	return ((state & (UINT64_MAX << low_bits)) << shift) ^
+		(((state << left) ^ state) >> right);
+}
+
+static uint64_t next_random(struct host *host)
+{
+	uint64_t *state = host->random_state;
+	if (host->config.random_generator == 0) {
+		state[0] = taus32_step((uint32_t)state[0], 13, 19, 12, 1);
+		state[1] = taus32_step((uint32_t)state[1], 2, 25, 4, 3);
+		state[2] = taus32_step((uint32_t)state[2], 3, 11, 17, 4);
+		return state[0] ^ state[1] ^ state[2];
+	}
+	state[0] = taus64_step(state[0], 1, 53, 10, 1);
+	state[1] = taus64_step(state[1], 24, 50, 5, 9);
+	state[2] = taus64_step(state[2], 3, 23, 29, 12);
+	state[3] = taus64_step(state[3], 5, 24, 23, 17);
+	state[4] = taus64_step(state[4], 3, 33, 8, 23);
+	return state[0] ^ state[1] ^ state[2] ^ state[3] ^ state[4];
+}
+
+static void reset_random_map(struct host *host)
+{
+	uint64_t bits = host->random_slots;
+	for (unsigned int level = 0; level < host->random_map_levels; ++level) {
+		size_t words = host->random_map_words[level];
+		memset(host->random_map[level], 0, words * sizeof(uint64_t));
+		/* Padding is occupied, so it can never become an address candidate. */
+		if (bits % 64)
+			host->random_map[level][words - 1] = UINT64_MAX << (bits % 64);
+		bits = words;
+	}
+	host->random_remaining = host->random_slots;
+}
+
+void cleanup_host_pattern(struct host *host)
+{
+	for (unsigned int level = 0; level < HOST_RANDOM_MAP_LEVELS; ++level) {
+		free(host->random_map[level]);
+		host->random_map[level] = NULL;
+		host->random_map_words[level] = 0;
+	}
+	host->random_map_levels = 0;
+	host->random_slots = 0;
+	host->random_remaining = 0;
+}
+
+/* A new host must be zero-initialized; this also supports reinitialization. */
+int init_host_pattern(struct host *host, uint64_t seed)
+{
+	static const unsigned int low32[] = {1, 3, 4};
+	static const unsigned int low64[] = {1, 9, 12, 17, 23};
+	struct host_config *config = &host->config;
+	uint64_t bits;
+
+	cleanup_host_pattern(host);
+	if (!config->nblks || config->min_lba > config->max_lba ||
+	    (config->random_generator != 0 && config->random_generator != 1))
+		return -1;
+	host->next_blkaddr = config->min_lba;
+	if (!config->pattern)
+		return 0;
+
+	host->random_slots =
+		((uint64_t)config->max_lba - config->min_lba) / config->nblks + 1;
+	/* Valid Tausworthe states must have at least one retained high bit. */
+	for (unsigned int i = 0; i < (config->random_generator ? 5U : 3U); ++i) {
+		uint64_t state = expand_seed(&seed);
+		if (config->random_generator)
+			host->random_state[i] = state | (UINT64_C(1) << low64[i]);
+		else
+			host->random_state[i] = (uint32_t)state | (UINT32_C(1) << low32[i]);
+	}
+	for (unsigned int i = 0; i < 6; ++i)
+		(void)next_random(host);
+	if (config->norandommap)
+		return 0;
+
+	bits = host->random_slots;
+	for (unsigned int level = 0; level < HOST_RANDOM_MAP_LEVELS; ++level) {
+		uint64_t words = (bits + 63) / 64;
+		if (words > SIZE_MAX / sizeof(uint64_t))
+			goto fail;
+		host->random_map[level] = calloc((size_t)words, sizeof(uint64_t));
+		if (!host->random_map[level])
+			goto fail;
+		host->random_map_words[level] = (size_t)words;
+		host->random_map_levels++;
+		if (words == 1) {
+			reset_random_map(host);
+			return 0;
+		}
+		bits = words;
+	}
+fail:
+	cleanup_host_pattern(host);
+	return -1;
+}
+
+/* Parent bits mark full child words, avoiding a linear scan of a busy map. */
+static uint64_t find_free_slot(const struct host *host, unsigned int level,
+		uint64_t start)
+{
+	uint64_t bits = level ? host->random_map_words[level - 1] : host->random_slots;
+	uint64_t word = start / 64;
+	uint64_t available;
+	if (start >= bits)
+		return UINT64_MAX;
+	available = ~host->random_map[level][word] & (UINT64_MAX << (start % 64));
+	if (!available) {
+		if (level + 1 == host->random_map_levels)
+			return UINT64_MAX;
+		word = find_free_slot(host, level + 1, word + 1);
+		if (word == UINT64_MAX)
+			return UINT64_MAX;
+		available = ~host->random_map[level][word];
+	}
+	assert(available);
+	return word * 64 + (unsigned int)__builtin_ctzll(available);
+}
+
+static void mark_random_slot(struct host *host, uint64_t slot)
+{
+	for (unsigned int level = 0; level < host->random_map_levels; ++level) {
+		uint64_t word = slot / 64;
+		host->random_map[level][word] |= UINT64_C(1) << (slot % 64);
+		if (host->random_map[level][word] != UINT64_MAX)
+			break;
+		slot = word;
+	}
+	host->random_remaining--;
+}
+
+static unsigned int next_random_lba(struct host *host)
+{
+	uint64_t random = next_random(host);
+	uint64_t slot;
+	assert(host->random_slots);
+	/* fio-style range scaling, calculated exactly without floating rounding. */
+	if (host->config.random_generator)
+		slot = (uint64_t)(((__uint128_t)random * host->random_slots) >> 64);
+	else
+		slot = (random * host->random_slots) >> 32;
+	if (!host->config.norandommap) {
+		if (!host->random_remaining)
+			reset_random_map(host);
+		slot = find_free_slot(host, 0, slot);
+		if (slot == UINT64_MAX)
+			slot = find_free_slot(host, 0, 0);
+		assert(slot < host->random_slots);
+		mark_random_slot(host, slot);
+	}
+	return (unsigned int)(host->config.min_lba + slot * host->config.nblks);
 }
 
 void init_hosts() {
@@ -41,17 +206,13 @@ void init_hosts() {
 		host->last_complete_reqs[1] = 0;
 		host->outstanding = 0;
 
-		if (host->config.pattern) {
-			unsigned int first = (host->config.min_lba + 3) / 4 * 4;
-			unsigned int last = host->config.max_lba / 4 * 4;
-
-			if (first <= last) {
-				unsigned int slots = (last - first) / 4 + 1;
-				host->next_blkaddr = first + (rand() % slots) * 4;
-			} else {
-				host->next_blkaddr = host->config.min_lba;
-			}
-		}
+		if (init_host_pattern(host, host->config.randseed +
+			(uint64_t)i * UINT64_C(0x9e3779b97f4a7c15))) {
+			fprintf(stderr, "fio job '%s': cannot initialize random address map.\n",
+				host->config.name);
+			sim_cleanup();
+			exit(EXIT_FAILURE);
+	}
 	}
 }
 
@@ -59,19 +220,10 @@ unsigned int get_next_blkaddr(struct host *host) {
 	struct host_config config = host->config;
 	unsigned int blkaddr = host->next_blkaddr;
 
-	if (config.pattern) {
-		unsigned int first = (config.min_lba + 3) / 4 * 4;
-		unsigned int last = config.max_lba / 4 * 4;
-		unsigned int slots;
-
-		if (first <= last) {
-			slots = (last - first) / 4 + 1;
-			host->next_blkaddr = first + (rand() % slots) * 4;
-		} else {
-			host->next_blkaddr = config.min_lba;
-		}
-	} else if (blkaddr > config.max_lba ||
-		   config.max_lba - blkaddr < config.nblks) {
+	if (config.pattern)
+		return next_random_lba(host);
+	if (blkaddr > config.max_lba ||
+	    config.max_lba - blkaddr < config.nblks) {
 		host->next_blkaddr = config.min_lba;
 	} else {
 		host->next_blkaddr = blkaddr + config.nblks;
@@ -223,6 +375,15 @@ int SchedulingHost() {
 	int exe = 0;
 	struct nvme_request_entry *req;
 
+	/* Reclaim queue depth before trying to submit more work at this time. */
+	while (fe_req_cq.outstanding) {
+		req = request_recv();
+		perf_report(req);
+		request_destroy(req);
+		fe_req_cq.outstanding--;
+		exe++;
+	}
+
 	while (sim.remaining_jobs && fe_req_sq.outstanding < MAX_QUEUE_DEPTH) {
 		struct job job;
 		struct host *host;
@@ -239,13 +400,8 @@ int SchedulingHost() {
 		exe++;
 	}
 
-	while (fe_req_cq.outstanding) {
-		req = request_recv();
-		perf_report(req);
-		request_destroy(req);
-		fe_req_cq.outstanding--;
-		exe++;
-	}
+	if (exe)
+		sim_note_progress();
 
 	if (!check_remaining_jobs()) {
 		update_and_print_bw();

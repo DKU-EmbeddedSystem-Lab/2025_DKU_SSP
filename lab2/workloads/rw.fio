@@ -1,0 +1,8 @@
+[global]
+bs=4k
+io_size=12G
+iodepth=32
+
+[sequential-write]
+rw=randwrite
+offset=0

@@ -1,0 +1,6 @@
+*.o
+*.d
+/cosmos_sim
+/tests/test_sim_random
+/tests/test_sim_random_parser
+/tests/test_sim_nand_handoff

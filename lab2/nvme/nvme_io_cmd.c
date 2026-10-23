@@ -49,10 +49,6 @@
 //   - First draft
 //////////////////////////////////////////////////////////////////////////////////
 
-/*
-#include "printf.h"
-*/
-#include <stdio.h>  /* jy */
 #include "debug.h"
 #include "io_access.h"
 
@@ -101,7 +97,7 @@ void handle_nvme_io_write(unsigned int cmdSlotTag, NVME_IO_COMMAND *nvmeIOCmd)
 	//writeInfo15.dword = nvmeIOCmd->dword[15];
 
 	//if(writeInfo12.FUA == 1)
-	//	printf("write FUA\r\n");
+	//	xil_printf("write FUA\r\n");
 
 	startLba[0] = nvmeIOCmd->dword[10];
 	startLba[1] = nvmeIOCmd->dword[11];
@@ -121,12 +117,12 @@ void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 	NVME_COMPLETION nvmeCPL;
 	unsigned int opc;
 	nvmeIOCmd = (NVME_IO_COMMAND*)nvmeCmd->cmdDword;
-	/*		printf("OPC = 0x%X\r\n", nvmeIOCmd->OPC);
-			printf("PRP1[63:32] = 0x%X, PRP1[31:0] = 0x%X\r\n", nvmeIOCmd->PRP1[1], nvmeIOCmd->PRP1[0]);
-			printf("PRP2[63:32] = 0x%X, PRP2[31:0] = 0x%X\r\n", nvmeIOCmd->PRP2[1], nvmeIOCmd->PRP2[0]);
-			printf("dword10 = 0x%X\r\n", nvmeIOCmd->dword10);
-			printf("dword11 = 0x%X\r\n", nvmeIOCmd->dword11);
-			printf("dword12 = 0x%X\r\n", nvmeIOCmd->dword12);*/
+	/*		xil_printf("OPC = 0x%X\r\n", nvmeIOCmd->OPC);
+			xil_printf("PRP1[63:32] = 0x%X, PRP1[31:0] = 0x%X\r\n", nvmeIOCmd->PRP1[1], nvmeIOCmd->PRP1[0]);
+			xil_printf("PRP2[63:32] = 0x%X, PRP2[31:0] = 0x%X\r\n", nvmeIOCmd->PRP2[1], nvmeIOCmd->PRP2[0]);
+			xil_printf("dword10 = 0x%X\r\n", nvmeIOCmd->dword10);
+			xil_printf("dword11 = 0x%X\r\n", nvmeIOCmd->dword11);
+			xil_printf("dword12 = 0x%X\r\n", nvmeIOCmd->dword12);*/
 
 
 	opc = (unsigned int)nvmeIOCmd->OPC;
@@ -135,7 +131,7 @@ void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 	{
 		case IO_NVM_FLUSH:
 		{
-		//	printf("IO Flush Command\r\n");
+		//	xil_printf("IO Flush Command\r\n");
 			nvmeCPL.dword[0] = 0;
 			nvmeCPL.specific = 0x0;
 			set_auto_nvme_cpl(nvmeCmd->cmdSlotTag, nvmeCPL.specific, nvmeCPL.statusFieldWord);
@@ -143,19 +139,19 @@ void handle_nvme_io_cmd(NVME_COMMAND *nvmeCmd)
 		}
 		case IO_NVM_WRITE:
 		{
-//			printf("IO Write Command\r\n");
+//			xil_printf("IO Write Command\r\n");
 			handle_nvme_io_write(nvmeCmd->cmdSlotTag, nvmeIOCmd);
 			break;
 		}
 		case IO_NVM_READ:
 		{
-//			printf("IO Read Command\r\n");
+//			xil_printf("IO Read Command\r\n");
 			handle_nvme_io_read(nvmeCmd->cmdSlotTag, nvmeIOCmd);
 			break;
 		}
 		default:
 		{
-			printf("Not Support IO Command OPC: %X\r\n", opc);
+			xil_printf("Not Support IO Command OPC: %X\r\n", opc);
 			ASSERT(0);
 			break;
 		}

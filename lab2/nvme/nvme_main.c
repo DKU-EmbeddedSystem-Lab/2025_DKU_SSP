@@ -56,10 +56,6 @@
 //   - First draft
 //////////////////////////////////////////////////////////////////////////////////
 
-/*
-#include "printf.h"
-*/
-#include <stdio.h>  /* jy */
 #include "debug.h"
 #include "io_access.h"
 
@@ -70,7 +66,7 @@
 #include "nvme_io_cmd.h"
 
 #include "../memory_map.h"
-#if 1 //jy
+#if COSMOS_SIM //jy
 #include "sim_main.h"
 #include "sim_host.h"
 #include "sim_frontend.h"
@@ -79,8 +75,8 @@
 
 volatile NVME_CONTEXT g_nvmeTask;
 
-#if 1 //jy
-void nvme_main(int argc, char *argv[])
+#if COSMOS_SIM //jy
+void nvme_main(void)
 {
 	int ret;
 #else
@@ -90,15 +86,15 @@ void nvme_main()
 	unsigned int exeLlr;
 	unsigned int rstCnt = 0;
 
-	printf("!!! Wait until FTL reset complete !!! \r\n");
+	xil_printf("!!! Wait until FTL reset complete !!! \r\n");
 
 	InitFTL();
 
 
-	printf("\r\nFTL reset complete!!! \r\n");
-	printf("Turn on the host PC \r\n");
-#if 1 //jy
-	init_sim(argc, argv);
+	xil_printf("\r\nFTL reset complete!!! \r\n");
+	xil_printf("Turn on the host PC \r\n");
+#if COSMOS_SIM //jy
+	init_sim();
 	g_nvmeTask.status = NVME_TASK_RUNNING;
 #endif
 
@@ -106,7 +102,8 @@ void nvme_main()
 	{
 		exeLlr = 1;
 
-#if 1//jy
+#if COSMOS_SIM //jy
+		unsigned long long generation = sim_progress_generation();
 		ret = SchedulingHost(); //jy
 		if (ret < 0) {
 			sim_cleanup();
@@ -125,7 +122,7 @@ void nvme_main()
 				set_nvme_admin_queue(1, 1, 1);
 				set_nvme_csts_rdy(1);
 				g_nvmeTask.status = NVME_TASK_RUNNING;
-				printf("\r\nNVMe ready!!!\r\n");
+				xil_printf("\r\nNVMe ready!!!\r\n");
 			}
 		}
 		else if(g_nvmeTask.status == NVME_TASK_RUNNING)
@@ -170,7 +167,7 @@ void nvme_main()
 				//flush grown bad block info
 				UpdateBadBlockTableForGrownBadBlock(RESERVED_DATA_BUFFER_BASE_ADDR);
 
-				printf("\r\nNVMe shutdown!!!\r\n");
+				xil_printf("\r\nNVMe shutdown!!!\r\n");
 			}
 		}
 		else if(g_nvmeTask.status == NVME_TASK_WAIT_RESET)
@@ -183,7 +180,7 @@ void nvme_main()
 				set_nvme_csts_shst(0);
 				set_nvme_csts_rdy(0);
 				g_nvmeTask.status = NVME_TASK_IDLE;
-				printf("\r\nNVMe disable!!!\r\n");
+				xil_printf("\r\nNVMe disable!!!\r\n");
 			}
 		}
 		else if(g_nvmeTask.status == NVME_TASK_RESET)
@@ -198,8 +195,8 @@ void nvme_main()
 			if (rstCnt>= 5){
 				pcie_async_reset(rstCnt);
 				rstCnt = 0;
-				printf("\r\nPcie iink disable!!!\r\n");
-				printf("Wait few minute or reconnect the PCIe cable\r\n");
+				xil_printf("\r\nPcie iink disable!!!\r\n");
+				xil_printf("Wait few minute or reconnect the PCIe cable\r\n");
 			}
 			else
 				rstCnt++;
@@ -210,38 +207,19 @@ void nvme_main()
 			set_nvme_csts_rdy(0);
 			g_nvmeTask.status = NVME_TASK_IDLE;
 
-			printf("\r\nNVMe reset!!!\r\n");
+			xil_printf("\r\nNVMe reset!!!\r\n");
 		}
 
-#if 0 //jy
-		ret = SchedulingHost();
-		if (ret < 0)
-			break;
-		else
-			exeLlr = 0;
-		ret = SchedulingFE();
-		if (ret)
-			exeLlr = 0;
-#endif 
 		if(exeLlr && ((nvmeDmaReqQ.headReq != REQ_SLOT_TAG_NONE) || notCompletedNandReqCnt || blockedReqCnt))
 		{
 			CheckDoneNvmeDmaReq();
 			SchedulingNandReq();
-#if 1 //jy
+#if COSMOS_SIM //jy
 			SchedulingNand();
+			/* Settle host, frontend and firmware work before moving time. */
+			sim_advance_if_idle(generation);
 #endif
 		}
-#if 0 //jy
-		if (exeLlr) {
-			ret = SchedulingHost(); //jy
-			if (ret < 0) {
-				sim_cleanup();
-				break;
-			}
-			SchedulingFE(); //jy
-			SchedulingNand();
-		}
-#endif
 	}
 }
 

@@ -18,6 +18,11 @@ struct sim_fio_job {
 	int read_percent;
 	int write_percent;
 	uint64_t block_size_bytes;
+	int norandommap;             /* Permit repeated random offsets. */
+	int randrepeat;              /* Reproducible random streams by default. */
+	uint64_t randseed;
+	int randseed_set;
+	int random_generator;        /* 0: tausworthe, 1: tausworthe64 */
 
 	uint64_t region_size_bytes;
 	unsigned int region_size_percent;

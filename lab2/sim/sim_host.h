@@ -3,6 +3,7 @@
 
 #include <sys/queue.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "host_lld.h"
@@ -10,6 +11,8 @@
 #define MAX_QUEUE_DEPTH			(1 << P_SLOT_TAG_WIDTH)
 #define CMD_NONE 				(1 << 31)
 #define HOST_NAME_MAX			64
+/* Six 64-way bitmap levels cover the complete 32-bit LBA address space. */
+#define HOST_RANDOM_MAP_LEVELS 6
 
 struct job {
 	unsigned int hid;
@@ -27,6 +30,9 @@ struct host_config {
 	unsigned int op_write_pcent;
 	unsigned int pattern; //s 0 r 1
 	unsigned int iodepth;
+	int norandommap;
+	int random_generator; /* 0: Tausworthe 32-bit, 1: Tausworthe 64-bit */
+	uint64_t randseed; /* resolved base seed; job index selects a separate stream */
 };
 
 struct host {
@@ -40,10 +46,18 @@ struct host {
 	unsigned int last_complete_reqs[2];
 	unsigned int outstanding;
 	uint64_t remaining_jobs;
+	uint64_t random_state[5];
+	uint64_t random_slots;
+	uint64_t random_remaining;
+	uint64_t *random_map[HOST_RANDOM_MAP_LEVELS];
+	size_t random_map_words[HOST_RANDOM_MAP_LEVELS];
+	unsigned int random_map_levels;
 };
 
 void init_hosts();
-void init_host_config(struct host_config *config, unsigned int *opt);
+/* Zero-initialize a new host; reinitialization and repeated cleanup are safe. */
+int init_host_pattern(struct host *host, uint64_t seed);
+void cleanup_host_pattern(struct host *host);
 struct nvme_request_entry *create_request(struct job job);
 void request_send(struct nvme_request_entry *req);
 struct nvme_request_entry *request_recv();

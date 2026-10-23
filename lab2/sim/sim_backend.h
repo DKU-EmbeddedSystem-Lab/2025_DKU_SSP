@@ -1,6 +1,15 @@
 #ifndef SIM_BACKEND_H_
 #define SIM_BACKEND_H_
 
+#if COSMOS_SIM //jy
+#include <stdio.h>
+
+/* Map firmware logging to the simulator's standard output. */
+#define xil_printf printf
+#else
+#include "xil_printf.h"
+#endif
+
 #include <sys/queue.h>
 #include "ftl_config.h"
 
@@ -40,6 +49,11 @@ void timer_put(struct timer_pqueue_entry *new_entry);
 void timer_warp();
 void set_busy(unsigned int ch, unsigned int way);
 void clear_busy(unsigned int ch, unsigned int way);
+/* Accept commands without advancing time, including calls from the driver. */
 void SchedulingNand();
+/* A scheduling pass may advance time only if no nested work made progress. */
+unsigned long long sim_progress_generation(void);
+void sim_note_progress(void);
+void sim_advance_if_idle(unsigned long long generation);
 
 #endif /* SIM_BACKEND_H_ */

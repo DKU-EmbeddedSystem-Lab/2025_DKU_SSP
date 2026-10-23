@@ -63,7 +63,7 @@ void identify_controller(unsigned int pBuffer)
 	ADMIN_IDENTIFY_CONTROLLER *identifyCNTL;
 	ADMIN_IDENTIFY_POWER_STATE_DESCRIPTOR *powerStateDesc;
 
-#if 0 //jy	
+#if !COSMOS_SIM //jy
 	identifyCNTL = (ADMIN_IDENTIFY_CONTROLLER*)pBuffer;
 #else
 	identifyCNTL = Addr2Mem(ADMIN_IDENTIFY_CONTROLLER, pBuffer);
@@ -154,7 +154,7 @@ void identify_namespace(unsigned int pBuffer)
 {
 	ADMIN_IDENTIFY_NAMESPACE *identifyNS;
 	ADMIN_IDENTIFY_FORMAT_DATA *formatData;
-#if 0 //jy
+#if !COSMOS_SIM //jy
 	identifyNS = (ADMIN_IDENTIFY_NAMESPACE *)pBuffer;
 #else
 	identifyNS = Addr2Mem(ADMIN_IDENTIFY_NAMESPACE, pBuffer);

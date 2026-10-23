@@ -48,10 +48,10 @@
 
 
 #include <assert.h>
-#include "printf.h"
 #include "memory_map.h"
-#include "sim_backend.h" /* jy */
-#include <stdio.h> /* jy */
+#if COSMOS_SIM //jy
+#include "sim_backend.h"
+#endif
 
 unsigned int storageCapacity_L;
 V2FMCRegisters* chCtlReg[USER_CHANNELS];
@@ -71,8 +71,8 @@ void InitFTL()
 
 	storageCapacity_L = (MB_PER_SSD - (MB_PER_MIN_FREE_BLOCK_SPACE + mbPerbadBlockSpace + MB_PER_OVER_PROVISION_BLOCK_SPACE)) * ((1024*1024) / BYTES_PER_NVME_BLOCK);
 
-	printf("[ storage capacity %d MB ]\r\n", storageCapacity_L / ((1024*1024) / BYTES_PER_NVME_BLOCK));
-	printf("[ ftl configuration complete. ]\r\n");
+	xil_printf("[ storage capacity %d MB ]\r\n", storageCapacity_L / ((1024*1024) / BYTES_PER_NVME_BLOCK));
+	xil_printf("[ ftl configuration complete. ]\r\n");
 }
 
 
@@ -80,7 +80,6 @@ void InitChCtlReg()
 {
 	if(USER_CHANNELS < 1)
 		assert(!"[WARNING] Configuration Error: Channel [WARNING]");
-#if 1 //jy
 	chCtlReg[0] = Addr2Mem(V2FMCRegisters, NSC_0_BASEADDR); /* jy */
 
 	if(USER_CHANNELS > 1)
@@ -104,35 +103,12 @@ void InitChCtlReg()
 	if(USER_CHANNELS > 7)
 		chCtlReg[7] = Addr2Mem(V2FMCRegisters, NSC_7_BASEADDR); /* jy */
 
+#if COSMOS_SIM //jy
 	for (int ch = 0; ch < USER_CHANNELS; ch++) {
 		chCtlReg[ch]->cmdSelect = 0;
 		chCtlReg[ch]->channelBusy= 0;
 		chCtlReg[ch]->readyBusy = ~(0);
 	}
-#else
-
-	chCtlReg[0] = (V2FMCRegisters *)NSC_0_BASEADDR;
-
-	if(USER_CHANNELS > 1)
-		chCtlReg[1] = (V2FMCRegisters *)NSC_1_BASEADDR;
-
-	if(USER_CHANNELS > 2)
-		chCtlReg[2] = (V2FMCRegisters *)NSC_2_BASEADDR;
-
-	if(USER_CHANNELS > 3)
-		chCtlReg[3] = (V2FMCRegisters *)NSC_3_BASEADDR;
-
-	if(USER_CHANNELS > 4)
-		chCtlReg[4] = (V2FMCRegisters *)NSC_4_BASEADDR;
-
-	if(USER_CHANNELS > 5)
-		chCtlReg[5] = (V2FMCRegisters *)NSC_5_BASEADDR;
-
-	if(USER_CHANNELS > 6)
-		chCtlReg[6] = (V2FMCRegisters *)NSC_6_BASEADDR;
-
-	if(USER_CHANNELS > 7)
-		chCtlReg[7] = (V2FMCRegisters *)NSC_7_BASEADDR;
 #endif
 }
 
@@ -180,7 +156,7 @@ void InitNandArray()
 
 	SyncAllLowLevelReqDone();
 
-	printf("[ NAND device reset complete. ]\r\n");
+	xil_printf("[ NAND device reset complete. ]\r\n");
 }
 
 

@@ -7,11 +7,26 @@
 
 void *g_mem;
 struct timer_pqueue g_timer;
+static unsigned long long progress_generation;
+
+unsigned long long sim_progress_generation(void) {
+	return progress_generation;
+}
+
+void sim_note_progress(void) {
+	progress_generation++;
+}
+
+void sim_advance_if_idle(unsigned long long generation) {
+	if (generation == progress_generation && !TAILQ_EMPTY(&g_timer.head))
+		timer_warp();
+}
 
 void init_g_timer() {
 	TAILQ_INIT(&(g_timer.head));
 	g_timer.current_time = 0;
 	g_timer.ongoing = 0;
+	progress_generation = 0;
 }
 
 void init_nand() {
@@ -98,6 +113,8 @@ void timer_warp() {
 		task = next_task;
 	} while (task && task->trigger_time == g_timer.current_time);
 
+	/* A nested wait must not let its caller advance time a second time. */
+	sim_note_progress();
 	return;
 }
 
@@ -162,7 +179,7 @@ void SchedulingNand() {
 				// row = chCtlReg[ch]->rowAddress;
 				// pageDataBuffer = chCtlReg[ch]->dataAddress;
 				// spareDataBuffer = chCtlReg[ch]->spareAddress;
-				task = task_create(ch, way, 650);
+				task = task_create(ch, way, 610);
 				timer_put(task);
 				chCtlReg[ch]->cmdSelect = V2FCommand_NOP;
 				execmd++;
@@ -170,7 +187,7 @@ void SchedulingNand() {
 			case V2FCommand_BlockErase:
 				way = chCtlReg[ch]->waySelection;
 				// row = chCtlReg[ch]->rowAddress;
-				task = task_create(ch, way, 15000);
+				task = task_create(ch, way, 5250);
 				timer_put(task);
 				chCtlReg[ch]->cmdSelect = V2FCommand_NOP;
 				execmd++;
@@ -195,7 +212,6 @@ void SchedulingNand() {
 		}
 	}
 
-	if (!execmd && !TAILQ_EMPTY(&(g_timer.head))) {
-		timer_warp();
-	}
+	if (execmd)
+		sim_note_progress();
 }

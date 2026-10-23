@@ -46,11 +46,12 @@
 //   - First draft
 //////////////////////////////////////////////////////////////////////////////////
 
-/*
+#if COSMOS_SIM //jy
+#include <stdio.h>
+#include "sim_backend.h"
+#else
 #include "printf.h"
-*/
-#include <stdio.h> /* jy */
-#include "sim_backend.h" /* jy */
+#endif
 #include <assert.h>
 #include "nvme/nvme.h"
 #include "nvme/host_lld.h"

@@ -1,10 +1,8 @@
 #include <stdio.h>
-#include <unistd.h>
 #include <getopt.h>
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
-#include <limits.h>
 
 #include "sim_main.h"
 #include "sim_host.h"
@@ -15,309 +13,138 @@
 #include "sim_fio.h"
 
 struct sim sim;
+static struct sim_fio_workload fio_workload;
 
-void init_sim_config() {
-	sim.config.nhosts = 1;
-	sim.config.parts_pcent = NULL;
-	sim.config.precond = 0;
-	sim.config.report = 0;
-	sim.config.output_dir = NULL;
-	sim.config.nops = 5000000;
-	sim.config.fio_file = NULL;
-	sim.config.fio_mode = 0;
-}
-
-static void show_usage(const char *program) {
-	fprintf(stderr,
-		"Usage:\n"
-		"  %s --fio-job WORKLOAD.fio [-c] [-r] [-o DIR]\n"
-		"  %s WORKLOAD.fio [-c] [-r] [-o DIR]\n"
-		"  %s -n N -w \"PATTERN READ%% WRITE%% NBLOCKS\" ... [options]\n\n"
+static void show_usage(FILE *stream, const char *program) {
+	fprintf(stream,
+		"Usage: %s [options] WORKLOAD.fio\n\n"
+		"Run GreedyFTL with a fio job file. Workload settings belong in the file.\n\n"
 		"Options:\n"
-		"  -f, --fio-job FILE    load a fio-compatible job file\n"
-		"  -n, --nworkers N      number of legacy workers (1..10)\n"
-		"  -w, --worker LIST     legacy worker definition (repeat N times)\n"
-		"  -s, --size LIST       legacy worker partition percentages\n"
-		"  -i, --inst N          total legacy I/O operations\n"
-		"  -c, --condition       precondition FTL mappings\n"
-		"  -r, --report          write lat.csv and perf.csv\n"
-		"  -o, --outputdir DIR   report output directory\n"
-		"  -h, --help            show this help\n",
+		"  -c, --condition      Precondition FTL mappings before running\n"
+		"  -r, --report         Save lat.csv and perf.csv in the current directory\n"
+		"  -o, --outputdir DIR  Save reports in an existing directory (enables -r)\n"
+		"  -h, --help           Show this help\n\n"
+		"Examples:\n"
+		"  %s workloads/example.fio\n"
+		"  %s -c -o ./out workloads/example.fio\n",
 		program, program, program);
 }
 
-static int parse_u64_arg(const char *text, uint64_t *value) {
-	uint64_t parsed = 0;
-	const unsigned char *cursor = (const unsigned char *)text;
-
-	if (!text || !*text)
-		return -1;
-	while (*cursor) {
-		unsigned int digit;
-
-		if (*cursor < '0' || *cursor > '9')
-			return -1;
-		digit = (unsigned int)(*cursor - '0');
-		if (parsed > (UINT64_MAX - digit) / 10)
-			return -1;
-		parsed = parsed * 10 + digit;
-		cursor++;
-	}
-	*value = parsed;
-	return 0;
-}
-
-int parse_listed_arg(const char *arg, int len, unsigned int *listed_arg) {
-	int opt_idx = 0;
-	char *copy;
-	char *saveptr = NULL;
-	char *token;
-
-	if (!arg || len <= 0)
-		return -1;
-	copy = strdup(arg);
-	if (!copy)
-		return -1;
-
-	token = strtok_r(copy, " \t", &saveptr);
-	while (token) {
-		uint64_t value;
-		if (opt_idx >= len || parse_u64_arg(token, &value) ||
-		    value > UINT_MAX) {
-			free(copy);
-			return -1;
-		}
-		listed_arg[opt_idx++] = (unsigned int)value;
-		token = strtok_r(NULL, " \t", &saveptr);
-	}
-	free(copy);
-	return opt_idx == len ? 0 : -1;
-}
-
-void argparser(int argc, char *argv[]) {
+/* Parse before allocating NAND memory or initializing the FTL. */
+void parse_sim_args(int argc, char *argv[]) {
 	int opt;
-	int opt_idx = 0;
-	int host_idx = 0;
-	unsigned int arrarg[10];
-	int legacy_workload_option = 0;
-	struct option long_options[] = {
-		{"size", required_argument, NULL, 's'},
-		{"nworkers", required_argument, NULL, 'n'},
-		{"worker", required_argument, NULL, 'w'}, // "pattern, rp, wp, nblks"
-		{"inst", required_argument, NULL, 'i'}, 
+	char error[512];
+	static const struct option long_options[] = {
 		{"condition", no_argument, NULL, 'c'},
-		{"outputdir", required_argument, NULL, 'o'},
 		{"report", no_argument, NULL, 'r'},
-		{"fio", required_argument, NULL, 'f'},
-		{"fio-job", required_argument, NULL, 'f'},
+		{"outputdir", required_argument, NULL, 'o'},
 		{"help", no_argument, NULL, 'h'},
 		{0, 0, 0, 0}
 	};
 
-	while ((opt = getopt_long(argc, argv, "n:w:s:i:o:f:crh", long_options, &opt_idx)) != -1) {
+	memset(&sim.config, 0, sizeof(sim.config));
+	opterr = 0;
+	while ((opt = getopt_long(argc, argv, ":cro:h", long_options, NULL)) != -1) {
 		switch (opt) {
-			case 'n':
-				{
-					uint64_t workers;
-					if (parse_u64_arg(optarg, &workers) || workers < 1 ||
-					    workers > SIM_FIO_MAX_JOBS) {
-						fprintf(stderr, "nworkers must be between 1 and %d.\n",
-							SIM_FIO_MAX_JOBS);
-						exit(1);
-					}
-					if (sim.hosts) {
-						fprintf(stderr, "nworkers may only be specified once.\n");
-						exit(1);
-					}
-					sim.config.nhosts = (int)workers;
-					sim.hosts = calloc(sim.config.nhosts, sizeof(*sim.hosts));
-					if (!sim.hosts) {
-						perror("calloc");
-						exit(1);
-					}
-					legacy_workload_option = 1;
-				}
-				break;
-			case 'w':
-				if (!sim.hosts) {
-					fprintf(stderr, "Set --nworkers before --worker.\n");
-					exit(1);
-				}
-				if (host_idx == sim.config.nhosts) {
-					fprintf(stderr, "Can't create worker[%d]; nworkers is %d.\n",
-						host_idx, sim.config.nhosts);
-					exit(1);
-				}
-				memset(arrarg, 0, sizeof(arrarg));
-				if (parse_listed_arg(optarg, 4, arrarg)) {
-					fprintf(stderr, "Invalid worker '%s'; expected four unsigned integers.\n",
-						optarg);
-					exit(1);
-				}
-				if (arrarg[0] > 1 || arrarg[1] > 100 || arrarg[2] > 100 ||
-				    arrarg[1] + arrarg[2] != 100 ||
-				    arrarg[3] < 1 || arrarg[3] > MAX_NUM_OF_NLB) {
-					fprintf(stderr,
-						"Invalid worker[%d]: pattern must be 0/1, read+write 100, "
-						"and nblks 1..%u.\n",
-						host_idx, (unsigned int)MAX_NUM_OF_NLB);
-					exit(1);
-				}
-				init_host_config(&(sim.hosts[host_idx].config), arrarg);
-				host_idx++;
-				legacy_workload_option = 1;
-				break;
-			case 's':
-				if (!sim.hosts) {
-					fprintf(stderr, "Set --nworkers before --size.\n");
-					exit(1);
-				}
-				memset(arrarg, 0, sizeof(arrarg));
-				if (parse_listed_arg(optarg, sim.config.nhosts, arrarg)) {
-					fprintf(stderr, "Invalid partition list '%s'.\n", optarg);
-					exit(1);
-				}
-				{
-					uint64_t total = 0;
-					for (int i = 0; i < sim.config.nhosts; i++) {
-						if (arrarg[i] > 100) {
-							fprintf(stderr, "Partition percentages must be from 0 to 100.\n");
-							exit(1);
-						}
-						total += arrarg[i];
-					}
-					if (total != 100) {
-						fprintf(stderr, "Worker partition percentages must total 100.\n");
-						exit(1);
-					}
-				}
-				free(sim.config.parts_pcent);
-				sim.config.parts_pcent = calloc(sim.config.nhosts,
-								      sizeof(*sim.config.parts_pcent));
-				if (!sim.config.parts_pcent) {
-					perror("calloc");
-					exit(1);
-				}
-				for (int i = 0; i < sim.config.nhosts; i++)
-					sim.config.parts_pcent[i] = (int)arrarg[i];
-				legacy_workload_option = 1;
-				break;
-            case 'c':
-				sim.config.precond = 1;
-				break;
-            case 'r':
-				sim.config.report = 1;
-				break;
-			case 'o':
-				free(sim.config.output_dir);
-				sim.config.output_dir = strdup(optarg);
-				if (!sim.config.output_dir) {
-					perror("strdup");
-					exit(1);
-				}
-				break;
-			case 'i':
-				if (parse_u64_arg(optarg, &sim.config.nops) || !sim.config.nops) {
-					fprintf(stderr, "inst must be a positive integer.\n");
-					exit(1);
-				}
-				legacy_workload_option = 1;
-				break;
-			case 'f':
-				if (sim.config.fio_file) {
-					fprintf(stderr, "Only one fio job file may be specified.\n");
-					exit(1);
-				}
-				sim.config.fio_file = strdup(optarg);
-				if (!sim.config.fio_file) {
-					perror("strdup");
-					exit(1);
-				}
-				break;
-			case 'h':
-				show_usage(argv[0]);
-				exit(0);
-				break;
-			default:
-				show_usage(argv[0]);
-				exit(1);
+		case 'c':
+			sim.config.precond = 1;
+			break;
+		case 'r':
+			sim.config.report = 1;
+			break;
+		case 'o':
+			if (!*optarg) {
+				fprintf(stderr, "Error: output directory must not be empty.\n");
+				exit(EXIT_FAILURE);
+			}
+			sim.config.output_dir = optarg;
+			sim.config.report = 1;
+			break;
+		case 'h':
+			show_usage(stdout, argv[0]);
+			exit(EXIT_SUCCESS);
+		case ':':
+			fprintf(stderr, "Error: option '%s' requires an argument.\n",
+				argv[optind - 1]);
+			fprintf(stderr, "Try '%s --help' for usage.\n", argv[0]);
+			exit(EXIT_FAILURE);
+		default:
+			if (optopt)
+				fprintf(stderr, "Error: unknown option '-%c'.\n", optopt);
+			else
+				fprintf(stderr, "Error: unknown option '%s'.\n", argv[optind - 1]);
+			fprintf(stderr, "Try '%s --help' for usage.\n", argv[0]);
+			exit(EXIT_FAILURE);
 		}
 	}
 
-	if (optind < argc) {
-		if (sim.config.fio_file || optind + 1 != argc) {
-			fprintf(stderr, "Unexpected positional argument.\n");
-			show_usage(argv[0]);
-			exit(1);
-		}
-		sim.config.fio_file = strdup(argv[optind]);
-		if (!sim.config.fio_file) {
-			perror("strdup");
-			exit(1);
-		}
+	if (argc - optind != 1 || !*argv[optind]) {
+		fprintf(stderr, "Error: provide exactly one fio job file.\n\n");
+		show_usage(stderr, argv[0]);
+		exit(EXIT_FAILURE);
 	}
-	if (sim.config.fio_file && legacy_workload_option) {
-		fprintf(stderr,
-			"--fio-job cannot be combined with -n, -w, -s, or -i.\n");
-		exit(1);
-	}
-	if (sim.hosts && host_idx != sim.config.nhosts) {
-		fprintf(stderr, "Expected %d worker definitions, got %d.\n",
-			sim.config.nhosts, host_idx);
-		exit(1);
+	sim.config.fio_file = argv[optind];
+	if (sim_fio_load(sim.config.fio_file, &fio_workload, error, sizeof(error))) {
+		fprintf(stderr, "Error: %s: %s\n", sim.config.fio_file, error);
+		exit(EXIT_FAILURE);
 	}
 }
 
-void fill_host_config() {
-	int i;
-	unsigned int cumulative_percent = 0;
+/* Use the largest exact binary unit so small regions never round to 0 GB. */
+static void format_bytes(uint64_t bytes, char *buffer, size_t size) {
+	static const char *const units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+	size_t unit = 0;
 
-	if (!sim.config.parts_pcent) {
-		sim.config.parts_pcent = calloc(sim.config.nhosts,
-						 sizeof(*sim.config.parts_pcent));
-		if (!sim.config.parts_pcent) {
-			perror("calloc");
-			exit(1);
-		}
-		for (i = 0; i < sim.config.nhosts; i++) {
-			sim.config.parts_pcent[i] = 100 / sim.config.nhosts;
-			if (i < 100 % sim.config.nhosts)
-				sim.config.parts_pcent[i]++;
-		}
+	while (bytes && bytes % 1024 == 0 &&
+	       unit + 1 < sizeof(units) / sizeof(units[0])) {
+		bytes /= 1024;
+		unit++;
 	}
-
-	for (i = 0; i < sim.config.nhosts; i++) {
-		unsigned int region_end;
-		sim.hosts[i].config.min_lba =
-			(unsigned int)((uint64_t)MAX_LBA * cumulative_percent / 100);
-		cumulative_percent += sim.config.parts_pcent[i];
-		region_end = (unsigned int)((uint64_t)MAX_LBA * cumulative_percent / 100);
-		if (region_end - sim.hosts[i].config.min_lba <
-		    sim.hosts[i].config.nblks) {
-			fprintf(stderr, "Worker[%d] partition is smaller than its block size.\n", i);
-			exit(1);
-		}
-		sim.hosts[i].config.max_lba = region_end - sim.hosts[i].config.nblks;
-	}
+	snprintf(buffer, size, "%" PRIu64 " %s", bytes, units[unit]);
 }
 
-void show_configs() {
-	printf("%d workers\n", sim.config.nhosts);
+static const char *fio_rw_name(const struct host_config *config) {
+	if (config->op_read_pcent == 100)
+		return config->pattern ? "randread" : "read";
+	if (config->op_write_pcent == 100)
+		return config->pattern ? "randwrite" : "write";
+	return config->pattern ? "randrw" : "rw";
+}
+
+static void show_configs(void) {
+	printf("\nFIO workload: %s\n", sim.config.fio_file);
+	printf("  Jobs: %d  |  Total I/Os: %" PRIu64 "\n",
+		sim.config.nhosts, sim.config.nops);
+	printf("  Precondition: %s  |  Reports: %s\n",
+		sim.config.precond ? "on" : "off",
+		sim.config.report ?
+			(sim.config.output_dir ? sim.config.output_dir : ".") : "off");
+
 	for (int i = 0; i < sim.config.nhosts; i++) {
-		printf("  Worker[%d]%s%s: %s r%d w%d nblks%d qd%d ops=%" PRIu64 "\n",
-			i, sim.hosts[i].config.name[0] ? " " : "",
-			sim.hosts[i].config.name,
-			sim.hosts[i].config.pattern ? "random" : "sequential",
-			sim.hosts[i].config.op_read_pcent,
-			sim.hosts[i].config.op_write_pcent,
-			sim.hosts[i].config.nblks,
-			sim.hosts[i].config.iodepth,
-			sim.hosts[i].remaining_jobs);
-		printf("   - partition: %d GB ~ %d GB\n", sim.hosts[i].config.min_lba / (1000000000 / 4096), (sim.hosts[i].config.max_lba + sim.hosts[i].config.nblks) / (1000000000 / 4096));
+		const struct host *host = &sim.hosts[i];
+		const struct host_config *config = &host->config;
+		uint64_t offset = (uint64_t)config->min_lba * BYTES_PER_NVME_BLOCK;
+		uint64_t region_size =
+			((uint64_t)config->max_lba + config->nblks - config->min_lba) *
+			BYTES_PER_NVME_BLOCK;
+		char block_text[32], offset_text[32], size_text[32];
+
+		format_bytes((uint64_t)config->nblks * BYTES_PER_NVME_BLOCK,
+			     block_text, sizeof(block_text));
+		format_bytes(offset, offset_text, sizeof(offset_text));
+		format_bytes(region_size, size_text, sizeof(size_text));
+		printf("\n  [%d] %s\n", i, config->name);
+		printf("      rw=%s  bs=%s  iodepth=%u  read/write=%u/%u%%\n",
+			fio_rw_name(config), block_text, config->iodepth,
+			config->op_read_pcent, config->op_write_pcent);
+		printf("      offset=%s  size=%s  ios=%" PRIu64 "\n",
+			offset_text, size_text, host->remaining_jobs);
+		if (config->pattern)
+			printf("      random_generator=%s  norandommap=%d  randseed=%" PRIu64 "\n",
+				config->random_generator ? "tausworthe64" : "tausworthe",
+				config->norandommap, config->randseed);
 	}
-	printf("Precondition %d\n", sim.config.precond);
-	printf("Report %d\n", sim.config.report);
-	printf("Total OPs %" PRIu64 "\n", sim.config.nops);
+	printf("\n");
 }
 
 void flush_hist_to_file(int idx) {
@@ -329,13 +156,21 @@ void flush_hist_to_file(int idx) {
 }
 
 void sim_cleanup() {
-	if (!sim.config.report)
-		return;
-
-	for (int i = 0; i < 2; i++) {
-		flush_hist_to_file(i);
-		fflush(sim.fp[i]);
-		fclose(sim.fp[i]);
+	if (sim.config.report) {
+		for (int i = 0; i < 2; i++) {
+			if (sim.fp[i]) {
+				flush_hist_to_file(i);
+				fflush(sim.fp[i]);
+				fclose(sim.fp[i]);
+				sim.fp[i] = NULL;
+			}
+		}
+	}
+	if (sim.hosts) {
+		for (int i = 0; i < sim.config.nhosts; i++)
+			cleanup_host_pattern(&sim.hosts[i]);
+		free(sim.hosts);
+		sim.hosts = NULL;
 	}
 }
 
@@ -398,52 +233,63 @@ void precond_mappings() {
 void create_log_files () {
 	FILE *fp1, *fp2;
 	char path1[512], path2[512];
-	char *prefix;
+	const char *prefix = sim.config.output_dir ? sim.config.output_dir : ".";
 
-	if (!sim.config.output_dir)
-		prefix = strdup(".");
-	else 
-		prefix = strdup(sim.config.output_dir);
-
-	snprintf(path1, sizeof(path1), "%s/lat.csv", prefix);
+	if (snprintf(path1, sizeof(path1), "%s/lat.csv", prefix) >= sizeof(path1) ||
+	    snprintf(path2, sizeof(path2), "%s/perf.csv", prefix) >= sizeof(path2)) {
+		fprintf(stderr, "Error: report output path is too long.\n");
+		exit(EXIT_FAILURE);
+	}
 	fp1 = fopen(path1, "w");
 	if (fp1 == NULL) {
-		fprintf(stderr, "Failed to open %s.\n", path1);
+		perror(path1);
 		exit(1);
 	}
-	snprintf(path2, sizeof(path2), "%s/perf.csv", prefix);
 	fp2 = fopen(path2, "w");
 	if (fp2 == NULL) {
-		fprintf(stderr, "Failed to open %s.\n", path1);
+		perror(path2);
 		fclose(fp1);
 		exit(1);
 	}
 	sim.fp[0] = fp1;
 	sim.fp[1] = fp2;
-
-	free(prefix);
 }
 
-static void load_fio_config(const char *path) {
-	struct sim_fio_workload workload;
+static uint64_t resolve_random_seed(const struct sim_fio_job *job)
+{
+	uint64_t seed;
+	FILE *entropy;
+	if (job->randseed_set)
+		return job->randseed;
+	if (job->randrepeat || !job->pattern)
+		return UINT64_C(137);
+	entropy = fopen("/dev/urandom", "rb");
+	if (!entropy) {
+		perror("Cannot initialize random seed");
+		exit(EXIT_FAILURE);
+	}
+	if (fread(&seed, sizeof(seed), 1, entropy) != 1) {
+		fprintf(stderr, "Cannot read random seed from /dev/urandom.\n");
+		fclose(entropy);
+		exit(EXIT_FAILURE);
+	}
+	fclose(entropy);
+	return seed;
+}
+
+static void load_fio_config(void) {
 	uint64_t capacity_bytes = (uint64_t)MAX_LBA * BYTES_PER_NVME_BLOCK;
 	uint64_t total_ops = 0;
-	char error[512];
 
-	if (sim_fio_load(path, &workload, error, sizeof(error))) {
-		fprintf(stderr, "Failed to load fio job file: %s\n", error);
-		exit(1);
-	}
-
-	sim.config.nhosts = (int)workload.njobs;
+	sim.config.nhosts = (int)fio_workload.njobs;
 	sim.hosts = calloc(sim.config.nhosts, sizeof(*sim.hosts));
 	if (!sim.hosts) {
 		perror("calloc");
 		exit(1);
 	}
 
-	for (unsigned int i = 0; i < workload.njobs; i++) {
-		const struct sim_fio_job *fio_job = &workload.jobs[i];
+	for (unsigned int i = 0; i < fio_workload.njobs; i++) {
+		const struct sim_fio_job *fio_job = &fio_workload.jobs[i];
 		struct host *host = &sim.hosts[i];
 		uint64_t offset = fio_job->offset_set ? fio_job->offset_bytes : 0;
 		uint64_t region_size;
@@ -526,6 +372,9 @@ static void load_fio_config(const char *path) {
 		host->config.nblks =
 			(unsigned int)(fio_job->block_size_bytes / BYTES_PER_NVME_BLOCK);
 		host->config.iodepth = fio_job->iodepth;
+		host->config.norandommap = fio_job->norandommap;
+		host->config.random_generator = fio_job->random_generator;
+		host->config.randseed = resolve_random_seed(fio_job);
 		host->config.min_lba = (unsigned int)(offset / BYTES_PER_NVME_BLOCK);
 		host->config.max_lba =
 			(unsigned int)(host->config.min_lba + region_blocks - host->config.nblks);
@@ -533,40 +382,11 @@ static void load_fio_config(const char *path) {
 		total_ops += operations;
 	}
 
-	sim.config.fio_mode = 1;
 	sim.config.nops = total_ops;
 }
 
-void init_sim(int argc, char *argv[]) {
-	sim.hosts = NULL;
-	init_sim_config();
-	argparser(argc, argv);
-	if (sim.config.fio_file) {
-		load_fio_config(sim.config.fio_file);
-	} else if (!sim.hosts) {
-		if (sim.config.nhosts != 1) {
-			fprintf(stderr, "Unset option: w\n");
-			exit(1);
-		}
-		unsigned int seq_write_16k[4] = {0, 0, 100, 4};
-		sim.hosts = calloc(1, sizeof(*sim.hosts));
-		if (!sim.hosts) {
-			perror("calloc");
-			exit(1);
-		}
-		for (int i = 0; i < sim.config.nhosts; i++)
-			init_host_config(&(sim.hosts[i].config), seq_write_16k);
-	}
-	if (!sim.config.fio_mode) {
-		fill_host_config();
-		for (int i = 0; i < sim.config.nhosts; i++) {
-			snprintf(sim.hosts[i].config.name,
-				 sizeof(sim.hosts[i].config.name), "worker%d", i);
-			sim.hosts[i].remaining_jobs = sim.config.nops / sim.config.nhosts;
-			if ((uint64_t)i < sim.config.nops % sim.config.nhosts)
-				sim.hosts[i].remaining_jobs++;
-		}
-	}
+void init_sim(void) {
+	load_fio_config();
 
 	if (sim.config.report)
 		create_log_files();

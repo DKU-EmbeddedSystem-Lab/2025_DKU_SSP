@@ -1,0 +1,9 @@
+[global]
+ioengine=libaio
+bs=4k
+io_size=12G
+iodepth=32
+
+[sequential-write]
+rw=write
+offset=0
